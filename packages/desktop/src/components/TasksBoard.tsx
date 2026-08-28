@@ -5,7 +5,7 @@ import {
   Loader2, MessageSquare, Pencil, Plus, Sparkles, Trash2, User as UserIcon, X,
 } from 'lucide-react';
 import {
-  TASK_STATUSES, TASK_PRIORITIES, type Task, type TaskPriority, type TaskStatus,
+  TASK_STATUSES, TASK_PRIORITIES, uebersetztesFeld, type Task, type TaskPriority, type TaskStatus,
 } from '@stellium/shared';
 import { useStore } from '../state/store.js';
 import { useVorschlaege } from '../state/vorschlaege.js';
@@ -411,7 +411,7 @@ const TaskCard = memo(function TaskCard({ task, onOpen, onDragStart, onDragEnd, 
         onClick={() => onOpen(task.id)}
       >
         <span className="task-card__prio" style={{ background: PRIO_FARBE[task.priority] }} />
-        <span className="task-card__title">{task.title}</span>
+        <span className="task-card__title">{uebersetztesFeld(task, 'title', task.title)}</span>
         {task.vonKi && !task.geprueft && (
           <span className="task-card__ki" title={t('pruefen.hint')}>
             <Sparkles size={10} /> {t('pruefen.badge')}
@@ -598,7 +598,7 @@ function TaskDetail({ task, onClose, onDelete }: { task: Task; onClose: () => vo
 
   return (
     <Shell
-      title={task.title}
+      title={uebersetztesFeld(task, 'title', task.title) ?? task.title}
       icon={<ListChecks size={18} />}
       onClose={onClose}
       width={640}

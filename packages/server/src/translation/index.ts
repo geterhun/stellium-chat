@@ -1,7 +1,7 @@
 import {
   detectLanguage, dezimaltrennzeichenFuerSprache, findMeasurements, istE2EChiffrat, maskText, messwertPlatzhalter,
   messwerteInTextEinsetzen, normalizeLang, placeholdersIntact, PLACEHOLDER, translatableLength, unmaskText,
-  type AiCapabilities, type Massregion, type Messwert, type TranslationView,
+  type AiCapabilities, type KartenUebersetzung, type Massregion, type Messwert, type TranslationView,
 } from '@stellium/shared';
 import {
   config, aiConfigured, aktiverAnbieter, istLokal, laufzeitSetzen, lokaleEinstellung, type AiProvider,
@@ -1848,6 +1848,70 @@ export async function translateChannel(
     channelId, target, verschluesseln(JSON.stringify(daten)), hash, provider.name, Date.now(),
   );
   return { lang: target, ...daten, provider: provider.name };
+}
+
+/**
+ * Textfelder einer Karte — Aufgabe, Termin, Idee, Vorschlag — in die
+ * Lesesprache bringen.
+ *
+ * Bis hierher übersetzte der Server nur den Chat: Nachricht, Kanal, Umfrage.
+ * Alles, was daneben liegt, kam unübersetzt an — wer die Oberfläche auf
+ * Spanisch stellte, las das Ideenbrett und den Vorschlagseingang trotzdem
+ * auf Deutsch, und zwar ohne jeden Hinweis darauf, dass hier etwas fehlt.
+ *
+ * Warum EINE Funktion für vier Karten und nicht vier wie bei Kanal und
+ * Umfrage: die vier unterscheiden sich nur in ihren Feldnamen. Gemeinsam ist
+ * ihnen die Entscheidung, die man leicht falsch trifft — leere Felder
+ * auslassen, `noop` als „steht schon in dieser Sprache" behandeln, und ein
+ * Feld, das scheitert, nicht die ganze Karte mitreißen lassen.
+ *
+ * Kein eigener Zwischenspeicher wie `channel_translations`: translate()
+ * schlägt in `translation_memory` nach (Anbieter, Sprachpaar, Text). Karten
+ * sind kurz und wiederholen sich — derselbe Wortlaut steht als Vorschlag im
+ * Eingang und später als Aufgabe im Brett und trifft dort denselben Eintrag.
+ * Eine eigene Tabelle hätte eine Nachrüstung in db/migrate.ts verlangt und
+ * dafür keinen einzigen Modellaufruf gespart.
+ */
+export async function translateKarte(
+  felder: Record<string, string | null>,
+  targetLang: string,
+  autorId: string,
+): Promise<KartenUebersetzung | null> {
+  const target = normalizeLang(targetLang);
+  const eintraege = Object.entries(felder)
+    .filter((paar): paar is [string, string] => Boolean(paar[1]?.trim()));
+  if (!eintraege.length) return null;
+
+  const erledigt = await Promise.all(eintraege.map(async ([name, text]) => {
+    /* Ein Chiffrat ginge als Buchstabensalat an ein fremdes Modell. Zurück
+       käme Unsinn — hingegangen wäre es trotzdem. Dieselbe Grenze wie in
+       fillCachedTranslations() und pollUebersetzungNachreichen(). */
+    if (istE2EChiffrat(text)) return null;
+    try {
+      const ergebnis = await translate({
+        text,
+        targetLang: target,
+        sourceLang: erkennungOderAutorensprache(text, autorId),
+      });
+      /* `noop` heißt: die Karte steht bereits in der Lesesprache. Dann darf
+         das Feld NICHT ins Wörterbuch — sonst zeigte die Ansicht ein
+         „übersetzt aus …" an unverändertem Text, also eine Falschauskunft.
+         `unuebersetzt` ist derselbe Fall aus der anderen Richtung: das
+         Modell hat geantwortet, aber mit dem Eingabetext. */
+      if (ergebnis.noop || ergebnis.unuebersetzt) return null;
+      return [name, ergebnis.text] as const;
+    } catch (err) {
+      /* Ein Feld, das nicht durchkommt, nimmt die anderen nicht mit: ein
+         übersetzter Titel ohne Beschreibung ist mehr wert als eine Karte,
+         die deswegen ganz unübersetzt bleibt. */
+      console.error('[karte]', name, (err as Error).message);
+      return null;
+    }
+  }));
+
+  const treffer = erledigt.filter((e): e is readonly [string, string] => e !== null);
+  if (!treffer.length) return null;
+  return { lang: target, felder: Object.fromEntries(treffer), provider: provider.name };
 }
 
 /* ── Änderungslisten von Fassungen übersetzen ────────────────────

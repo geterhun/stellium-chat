@@ -46,7 +46,7 @@ server-setup       Ein-Klick-Installer und Werkzeuge für den Raspberry Pi
 scripts            Prüfläufe (e2e-*), Wörterbücher, Ausliefern
 ```
 
-## Zwei Dinge, die man leicht übersieht
+## Drei Dinge, die man leicht übersieht
 
 **Alle Texte kommen aus dem Wörterbuch.** Nichts Lesbares gehört fest in den
 Code — die Oberfläche liegt in 22 Sprachen vor. Prüfen mit:
@@ -63,6 +63,39 @@ neue Schlüssel dort von Hand nachtragen.
 mit lesbarem Inhalt anlegt, muss sie durch `crypto/nachrichten.ts` schicken
 und in `db/migrate.ts` in die Nachrüstung aufnehmen. Der Volltextindex trägt
 Fingerabdrücke, keine Wörter.
+
+**Übersetzt wird nicht nur der Chat.** Aufgaben, Termine, Ideen und
+Vorschläge sind ebenso Text, den jemand in einer fremden Sprache liest. Sie
+gehen durch `translateKarte()` (`translation/index.ts`) und werden über
+`kartenUebersetzungNachreichen()` (`ws/gateway.ts`) NACHGEREICHT — die Karten
+stehen sofort im Original da, die Lesesprache kommt Karte für Karte hinterher.
+
+Das ist die Stelle, die beim Erweitern still ausfällt: **wer eine neue
+Kartenart anlegt oder einer bestehenden ein lesbares Textfeld gibt, muss es
+in der `felder`-Liste der zugehörigen `*:list`-Verzweigung nachtragen.**
+Sonst erscheint das Feld überall — nur eben immer auf Deutsch, ohne Fehler,
+ohne Warnung, und niemand merkt es, solange alle Deutsch lesen.
+
+Drei Regeln, die dabei gelten:
+
+* **Das Original bleibt das Gespeicherte.** Die Übersetzung ist eine Ansicht,
+  genau wie bei `Message.text`. Eingabefelder zeigen darum weiter das
+  Original — was dort steht, wird beim Speichern wirklich übernommen.
+* **Nichts Vertrauliches geht hinaus.** Ein E2E-Chiffrat und alles aus einem
+  vertraulichen Kanal wird nicht übersetzt. Notizen sind Ende-zu-Ende
+  verschlüsselt und deshalb bewusst gar nicht dabei.
+* **Unverändert heißt unübersetzt.** Steht die Karte schon in der
+  Lesesprache, kommt sie NICHT ins Wörterbuch — ein „übersetzt aus …" an
+  unverändertem Text wäre eine Falschauskunft.
+
+```bash
+node scripts/karten-uebersetzung-pruefen.mjs
+```
+
+Der Lauf braucht keinen Schlüssel: ohne Anbieter übersetzt der DemoProvider
+aus einem kleinen Wörterbuch. Wer die Prüftexte ändert, nimmt Wörter, die
+dort vorkommen (`translation/providers/demo.ts`) — sonst misst der Lauf das
+Wörterbuch des Anbieters und nicht die Karte.
 
 ## Prüfläufe
 
@@ -81,9 +114,10 @@ node scripts/e2e-upload.mjs
 node scripts/e2e-nachruesten.mjs   # Server auf einer ALTEN Datenbank
 node scripts/schluesselwechsel-pruefen.mjs   # falsches Masterpasswort
 node scripts/notzugang-pruefen.mjs           # „3 von 5" — Notzugang
+node scripts/karten-uebersetzung-pruefen.mjs # Karten in der Lesesprache
 ```
 
-Die letzten drei brauchen keinen laufenden Server. `e2e-nachruesten` baut
+Die letzten vier brauchen keinen laufenden Server. `e2e-nachruesten` baut
 eine Datenbank nach dem Schema der letzten Fassung und startet den heutigen
 Server darauf. Alle anderen Läufe legen ihre Datenbank frisch an — dort bringt
 `CREATE TABLE` jede neue Spalte gleich mit, und ein Fehler in `db/migrate.ts`

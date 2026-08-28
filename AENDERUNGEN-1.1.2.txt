@@ -1,0 +1,4 @@
+Neu: Aufgaben, Termine, Ideen und Vorschläge erscheinen jetzt in der eigenen Lesesprache — bisher wurde nur der Chat übersetzt, alles daneben blieb in der Sprache, in der es geschrieben wurde.
+Neu: Die Übersetzung wird nachgereicht — die Karten stehen sofort da, die eigene Sprache kommt Sekundenbruchteile später, Karte für Karte.
+Unverändert: Gespeichert bleibt immer das Original. Wer eine Aufgabe bearbeitet, sieht dort weiter den Wortlaut, der wirklich gespeichert wird.
+Unverändert: Aus vertraulichen Kanälen und aus Notizen geht nichts an ein Übersetzungsmodell hinaus.

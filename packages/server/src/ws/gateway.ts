@@ -2,8 +2,8 @@ import type { WebSocket } from 'ws';
 import { kennungVon } from '../util/abweisung.js';
 import {
   decode, encode, isSupportedLang, normalizeLang, regionFuerZeitzone, WS_PROTOCOL_VERSION,
-  type ClientEvent, type Message, type ServerEvent, type Task, type TranslationView, type UserStatus,
-  type Vorschlag, type PostMeldung, type StoredFile,
+  type ClientEvent, type KartenUebersetzung, type Message, type ServerEvent, type Task,
+  type TranslationView, type UserStatus, type Vorschlag, type PostMeldung, type StoredFile,
 } from '@stellium/shared';
 import { verifyToken } from '../auth.js';
 import { db } from '../db/index.js';
@@ -11,7 +11,7 @@ import { config, pushConfigured } from '../config.js';
 import { newId } from '../util/id.js';
 import {
   aiCapabilities, assistant, cachedReleaseNotes, messwerteFuerEmpfaenger, messwerteRecordFuer, roundTrip,
-  translate, translateMessage, translatePoll, translateChannel, translateReleaseNotes,
+  translate, translateKarte, translateMessage, translatePoll, translateChannel, translateReleaseNotes,
 } from '../translation/index.js';
 import * as ai from '../services/ai.js';
 import * as praesenz from '../services/praesenz.js';
@@ -2449,14 +2449,22 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
 
     /* ── Aufgaben ─────────────────────────────────────────── */
 
-    case 'task:list':
-      send(session, {
-        t: 'task:list',
-        tasks: tasks.listTasks({
-          channelId: ev.channelId, assigneeId: ev.assigneeId, sichtbarFuer: userId,
-        }),
+    case 'task:list': {
+      const liste = tasks.listTasks({
+        channelId: ev.channelId, assigneeId: ev.assigneeId, sichtbarFuer: userId,
       });
+      send(session, { t: 'task:list', tasks: liste });
+      kartenUebersetzungNachreichen(
+        liste, userId,
+        (a) => ({
+          autorId: a.createdBy,
+          channelId: a.channelId,
+          felder: { title: a.title, description: a.description },
+        }),
+        (a) => sendToUser(userId, { t: 'task:upsert', task: a }),
+      );
       return;
+    }
 
     case 'task:create': {
       if (!darf(session, 'task.create')) return;
@@ -2659,7 +2667,20 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
        den vollen Kanalkreis: eine angenommene Aufgabe gehört dem Kanal. */
 
     case 'vorschlag:list': {
-      send(session, { t: 'vorschlag:list', vorschlaege: vorschlaege.listeFuer(userId) });
+      const liste = vorschlaege.listeFuer(userId);
+      send(session, { t: 'vorschlag:list', vorschlaege: liste });
+      kartenUebersetzungNachreichen(
+        liste, userId,
+        (v) => ({
+          /* Der Titel stammt vom Modell, der Quelltext von der Person, die
+             die Nachricht geschrieben hat — deren Sprache ist die bessere
+             Vermutung für beides. */
+          autorId: v.quelleUserId ?? userId,
+          channelId: v.channelId,
+          felder: { titel: v.titel, quelleText: v.quelleText },
+        }),
+        (v) => sendToUser(userId, { t: 'vorschlag:upsert', vorschlag: v }),
+      );
       return;
     }
 
@@ -2810,9 +2831,27 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
 
     /* ── Kalender ─────────────────────────────────────────── */
 
-    case 'event:list':
-      send(session, { t: 'event:list', events: events.listEvents(ev.from, ev.to, userId) });
+    case 'event:list': {
+      const liste = events.listEvents(ev.from, ev.to, userId);
+      send(session, { t: 'event:list', events: liste });
+      kartenUebersetzungNachreichen(
+        liste, userId,
+        (termin) => ({
+          autorId: termin.createdBy,
+          channelId: termin.channelId,
+          felder: {
+            title: termin.title,
+            description: termin.description,
+            /* Ein Ort ist oft ein Eigenname („Besprechungsraum 2", „Zoom") —
+               translateKarte lässt ihn über `noop` von selbst stehen, wenn
+               nichts zu übersetzen ist. */
+            location: termin.location,
+          },
+        }),
+        (termin) => sendToUser(userId, { t: 'event:upsert', event: termin }),
+      );
       return;
+    }
 
     case 'event:create': {
       if (!darf(session, 'event.create')) return;
@@ -2869,9 +2908,20 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
 
     /* ── Ideenboard ───────────────────────────────────────── */
 
-    case 'idea:list':
-      send(session, { t: 'idea:list', ideas: ideas.listIdeas(userId) });
+    case 'idea:list': {
+      const liste = ideas.listIdeas(userId);
+      send(session, { t: 'idea:list', ideas: liste });
+      kartenUebersetzungNachreichen(
+        liste, userId,
+        (i) => ({
+          autorId: i.createdBy,
+          channelId: i.channelId,
+          felder: { title: i.title, body: i.body, decision: i.decision },
+        }),
+        (i) => sendToUser(userId, { t: 'idea:upsert', idea: i }),
+      );
       return;
+    }
 
     case 'idea:create': {
       if (!darf(session, 'idea.create')) return;
@@ -3556,6 +3606,53 @@ async function pollUebersetzungNachreichen(pollId: string, userId: string, chann
     sendToUser(userId, { t: 'poll:updated', poll: { ...poll, translation: sicht }, channelId });
   } catch (err) {
     console.error('[umfrage]', (err as Error).message);
+  }
+}
+
+/**
+ * Karten in der Lesesprache nachreichen: Aufgaben, Termine, Ideen,
+ * Vorschläge.
+ *
+ * Übersetzt wurde bis hierher nur der Chat. Wer die Oberfläche auf Spanisch
+ * stellte, bekam Nachrichten übersetzt, las das Ideenbrett, das
+ * Aufgabenbrett, den Kalender und den Vorschlagseingang aber weiter auf
+ * Deutsch — ohne Hinweis darauf, dass hier überhaupt etwas fehlt.
+ *
+ * Warum nachgereicht und nicht gleich mitgeschickt: eine Übersetzung kostet
+ * einen Modellaufruf. Ein Brett mit dreißig Aufgaben ließe sich sonst
+ * dreißigmal Zeit, ehe überhaupt etwas zu sehen wäre. So stehen die Karten
+ * sofort da — im Original — und die Lesesprache kommt hinterher, Karte für
+ * Karte. Derselbe Weg wie bei Nachrichten (translateInBackground) und
+ * Umfragen (pollUebersetzungNachreichen).
+ *
+ * Warum eine Kette und kein Promise.all: dreißig gleichzeitige Aufrufe gegen
+ * ein Modell auf einem Raspberry Pi sind kein Gewinn an Nebenläufigkeit,
+ * sondern dreißig offene Verbindungen vor derselben Warteschlange. Genau wie
+ * in translateInBackground läuft eine Karte nach der anderen.
+ */
+function kartenUebersetzungNachreichen<T extends { id: string; translation?: KartenUebersetzung | null }>(
+  karten: T[],
+  userId: string,
+  ausschnitt: (karte: T) => { autorId: string; channelId: string | null; felder: Record<string, string | null> },
+  senden: (karte: T) => void,
+): void {
+  /* Dieselbe Bedingung wie im Chat: `autoTranslate` ist die Wahl der
+     Lesenden, nicht eine Eigenschaft der Karte. Ist sie aus, geht hier
+     nichts los — und es entsteht auch kein Modellaufruf. */
+  const self = store.getSelf(userId);
+  if (!self?.autoTranslate || !self.language) return;
+  const sprache = self.language;
+
+  let kette = Promise.resolve();
+  for (const karte of karten) {
+    kette = kette.then(async () => {
+      const { autorId, channelId, felder } = ausschnitt(karte);
+      /* Aus einem vertraulichen Kanal geht nichts an ein fremdes Modell —
+         dieselbe Grenze wie bei Umfragen und Nachrichten. */
+      if (channelId && vertraulich.istVertraulich(channelId)) return;
+      const translation = await translateKarte(felder, sprache, autorId);
+      if (translation) senden({ ...karte, translation });
+    }).catch((err) => console.error('[karte] nachreichen:', (err as Error).message));
   }
 }
 

@@ -4,7 +4,7 @@ import {
   CalendarDays, Check, ChevronLeft, ChevronRight, Clock, HelpCircle, MapPin,
   Plus, Sparkles, Trash2, X,
 } from 'lucide-react';
-import { EVENT_KINDS, type CalendarEvent, type EventKind } from '@stellium/shared';
+import { EVENT_KINDS, uebersetztesFeld, type CalendarEvent, type EventKind } from '@stellium/shared';
 import { useStore } from '../state/store.js';
 import { currentUiLanguage, useT } from '../i18n/index.js';
 import { Avatar } from './Avatar.jsx';
@@ -268,7 +268,7 @@ export function CalendarPanel({ onClose }: { onClose: () => void }) {
                       <span className="week__ev-time">
                         {e.allDay ? t('calendar.allDay') : uhrzeit(e.startsAt, sprache, zone)}
                       </span>
-                      <span className="week__ev-title">{e.title}</span>
+                      <span className="week__ev-title">{uebersetztesFeld(e, 'title', e.title)}</span>
                     </motion.button>
                   ))}
                 </AnimatePresence>
@@ -474,7 +474,7 @@ function EventDetail({ event, onClose }: { event: CalendarEvent; onClose: () => 
 
   return (
     <Shell
-      title={event.title}
+      title={uebersetztesFeld(event, 'title', event.title) ?? event.title}
       icon={<CalendarDays size={18} />}
       onClose={onClose}
       width={520}
@@ -495,8 +495,8 @@ function EventDetail({ event, onClose }: { event: CalendarEvent; onClose: () => 
           ? t('calendar.allDay')
           : `${new Date(event.startsAt).toLocaleString(sprache, zonenTeil(zone))} – ${uhrzeit(event.endsAt, sprache, zone)}`}
       </p>
-      {event.location && <p className="event-when"><MapPin size={13} /> {event.location}</p>}
-      {event.description && <p style={{ marginTop: 10 }}>{event.description}</p>}
+      {event.location && <p className="event-when"><MapPin size={13} /> {uebersetztesFeld(event, 'location', event.location)}</p>}
+      {event.description && <p style={{ marginTop: 10 }}>{uebersetztesFeld(event, 'description', event.description)}</p>}
 
       {!!event.attendees.length && (
         <div className="field">

@@ -4,7 +4,7 @@ import {
   Check, Hash, Inbox, Lightbulb, MessageSquare, Plus, Send, Sparkles, ThumbsDown, ThumbsUp,
   Trash2, X,
 } from 'lucide-react';
-import { IDEA_STATUSES, type Idea, type IdeaStatus } from '@stellium/shared';
+import { IDEA_STATUSES, uebersetztesFeld, type Idea, type IdeaStatus } from '@stellium/shared';
 import { useStore } from '../state/store.js';
 import { useVorschlaege } from '../state/vorschlaege.js';
 import { useT } from '../i18n/index.js';
@@ -180,7 +180,7 @@ export function IdeaBoard({ onClose }: { onClose: () => void }) {
         <VoteBox idea={idea} />
 
         <button className="idea-row__main" onClick={onOpen}>
-          <span className="idea-row__title">{idea.title}</span>
+          <span className="idea-row__title">{uebersetztesFeld(idea, 'title', idea.title)}</span>
           <span className="idea-row__meta">
             <span className="idea-status" style={{ color: STATUS_FARBE[idea.status] }}>
               <span className="idea-dot" style={{ background: STATUS_FARBE[idea.status] }} />
@@ -327,7 +327,7 @@ function IdeaDetail({ idea, onClose }: { idea: Idea; onClose: () => void }) {
 
   return (
     <Shell
-      title={idea.title}
+      title={uebersetztesFeld(idea, 'title', idea.title) ?? idea.title}
       subtitle={wer ? `${wer.displayName} · ${relativeTime(idea.createdAt)}` : undefined}
       icon={<Lightbulb size={18} />}
       onClose={onClose}
@@ -345,7 +345,7 @@ function IdeaDetail({ idea, onClose }: { idea: Idea; onClose: () => void }) {
         </button>
       ) : undefined}
     >
-      {idea.body && <p className="idea-body">{idea.body}</p>}
+      {idea.body && <p className="idea-body">{uebersetztesFeld(idea, 'body', idea.body)}</p>}
 
       <div className="idea-meta">
         <span className="idea-status" style={{ color: STATUS_FARBE[idea.status] }}>
@@ -361,7 +361,7 @@ function IdeaDetail({ idea, onClose }: { idea: Idea; onClose: () => void }) {
 
       {idea.decision && (
         <p className="idea-decision">
-          <Check size={13} /> {idea.decision}
+          <Check size={13} /> {uebersetztesFeld(idea, 'decision', idea.decision)}
           {idea.decidedBy && users[idea.decidedBy] && ` — ${users[idea.decidedBy].displayName}`}
         </p>
       )}

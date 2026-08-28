@@ -5,7 +5,7 @@ import {
   Undo2, X,
 } from 'lucide-react';
 import { useStore } from '../state/store.js';
-import type { Vorschlag, VorschlagArt } from '@stellium/shared';
+import { uebersetztesFeld, type Vorschlag, type VorschlagArt } from '@stellium/shared';
 import { useVorschlaege } from '../state/vorschlaege.js';
 import { useT } from '../i18n/index.js';
 import { Avatar } from './Avatar.jsx';
@@ -159,6 +159,17 @@ function Karte({ vorschlag, onClose }: { vorschlag: Vorschlag; onClose: () => vo
   const schreiber = vorschlag.quelleUserId ? users[vorschlag.quelleUserId] : null;
   const genannt = vorschlag.genanntUserId ? users[vorschlag.genanntUserId] : null;
 
+  /* Gelesen wird die Lesesprache, gespeichert das Original — dieselbe Regel
+     wie bei einer Nachricht, deren `text` IMMER das Original trägt. Darum
+     hängt die Übersetzung nur am Titel OBEN und nicht am Eingabefeld weiter
+     unten: was dort steht, geht beim Annehmen wirklich so in die Aufgabe.
+     Sobald jemand den Titel angefasst hat, gilt seine Fassung — sonst
+     schriebe die eintreffende Übersetzung ihm ins Feld zurück. */
+  const titelAnzeige = titel === vorschlag.titel
+    ? (uebersetztesFeld(vorschlag, 'titel', vorschlag.titel) ?? titel)
+    : titel;
+  const quelleAnzeige = uebersetztesFeld(vorschlag, 'quelleText', vorschlag.quelleText);
+
   const bestaetigen = () => annehmen(vorschlag.id, {
     titel: titel.trim(),
     art,
@@ -182,7 +193,7 @@ function Karte({ vorschlag, onClose }: { vorschlag: Vorschlag; onClose: () => vo
           {art === 'idee' ? <Lightbulb size={12} /> : <ListChecks size={12} />}
           {art === 'idee' ? t('vorschlaege.kindIdea') : t('vorschlaege.kindTask')}
         </span>
-        <h3 className="vorschlag__titel">{titel}</h3>
+        <h3 className="vorschlag__titel">{titelAnzeige}</h3>
       </div>
 
       <div className="vorschlag__meta">
@@ -207,7 +218,7 @@ function Karte({ vorschlag, onClose }: { vorschlag: Vorschlag; onClose: () => vo
             <strong>{schreiber?.displayName ?? '—'}</strong>
             {vorschlag.quelleAm && <span className="muted">{relativeTime(vorschlag.quelleAm)}</span>}
           </span>
-          <p className="vorschlag__quelle-text">{vorschlag.quelleText}</p>
+          <p className="vorschlag__quelle-text">{quelleAnzeige}</p>
           {vorschlag.quelleMessageId && (
             <button
               className="btn btn--ghost btn--sm"

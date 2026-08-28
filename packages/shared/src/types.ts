@@ -322,6 +322,45 @@ export interface TranslationView {
   measurements?: Record<number, Messwert>;
 }
 
+/**
+ * Übersetzte Textfelder einer Karte: Aufgabe, Termin, Idee, Vorschlag.
+ *
+ * Bis hierher konnte die Oberfläche nur den Chat übersetzen. Kanal, Nachricht
+ * und Umfrage hatten je eine eigene, benannte Gestalt (`name`/`topic`,
+ * `question`/`options`) — vier weitere davon wären vier fast gleiche
+ * Schnittstellen gewesen, die sich nur in den Feldnamen unterscheiden.
+ *
+ * Darum ein Wörterbuch: `felder` trägt nur, was es zu übersetzen GAB. Ein
+ * Feld, das leer war oder schon in der Lesesprache stand, fehlt hier — und
+ * `uebersetztesFeld()` fällt dann auf das Original zurück. Das ist der
+ * Unterschied zu „übersetzt zu einer leeren Zeichenkette", der sonst eine
+ * gefüllte Beschreibung stillschweigend verschwinden ließe.
+ */
+export interface KartenUebersetzung {
+  /** Zielsprache — dieselbe Schreibweise wie `User.language`. */
+  lang: string;
+  /** Feldname der Karte -> übersetzter Text. */
+  felder: Record<string, string>;
+  provider: string;
+}
+
+/**
+ * Ein Textfeld in der Lesesprache, sonst das Original.
+ *
+ * Warum an einer Stelle und nicht je Karte: alle vier Ansichten treffen
+ * dieselbe Entscheidung, und sie ist leicht falsch zu treffen — `??` allein
+ * greift bei `''` nicht, `||` wirft eine echte Übersetzung weg, die
+ * absichtlich leer ist. Hier steht sie einmal.
+ */
+export function uebersetztesFeld<T extends { translation?: KartenUebersetzung | null }>(
+  karte: T,
+  feld: string,
+  original: string | null,
+): string | null {
+  const uebersetzt = karte.translation?.felder[feld];
+  return uebersetzt === undefined ? original : uebersetzt;
+}
+
 export interface Message {
   id: string;
   channelId: string;
@@ -590,6 +629,8 @@ export interface Task extends KiHerkunft {
   updatedAt: number;
   finishedAt: number | null;
   watcherIds: string[];
+  /** Titel und Beschreibung in der Lesesprache, falls übersetzt. */
+  translation?: KartenUebersetzung | null;
 }
 
 /**
@@ -654,6 +695,8 @@ export interface CalendarEvent extends KiHerkunft {
   createdBy: string;
   createdAt: number;
   attendees: EventAttendee[];
+  /** Titel, Beschreibung und Ort in der Lesesprache, falls übersetzt. */
+  translation?: KartenUebersetzung | null;
 }
 
 /* ── Ankündigung einer Serverauszeit ──────────────────────────── */
@@ -710,6 +753,8 @@ export interface Idea extends KiHerkunft {
   /** Eigene Stimme: 1 dafür, -1 dagegen, 0 keine. */
   myVote: 1 | -1 | 0;
   commentCount: number;
+  /** Titel, Text und Entscheidung in der Lesesprache, falls übersetzt. */
+  translation?: KartenUebersetzung | null;
 }
 
 export interface IdeaComment {
@@ -773,6 +818,14 @@ export interface Vorschlag {
   erstelltAm: number;
   /** Bei angenommenen: die Kennung der entstandenen Aufgabe oder Idee. */
   ergebnisId: string | null;
+  /**
+   * Titel und Quelltext in der Lesesprache, falls übersetzt.
+   *
+   * Aus einem vertraulichen Kanal bleibt das immer `null` — dort ist schon
+   * `quelleText` null, und der Titel darf denselben Weg nicht gehen: was der
+   * Server nicht lesen darf, schickt er auch nicht an ein Übersetzungsmodell.
+   */
+  translation?: KartenUebersetzung | null;
 }
 
 /**
