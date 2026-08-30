@@ -98,6 +98,30 @@ for (const [breite, hoehe, beruehrung] of [
     }
   };
 
+  /**
+   * Die linke Leiste erreichbar machen.
+   *
+   * Unter 880 px (Tablet hochkant) steckt sie in der Schublade, genau wie
+   * die Kanalliste weiter unten. Ohne das hier klickt jeder Griff auf ein
+   * Element, das zwar im Baum steht, aber nicht sichtbar ist — Playwright
+   * wartet dann bis zum Zeitablauf. Bei 820×1180 und 768×1024 war deshalb
+   * fast der ganze Prüflauf rot, ohne dass an der App etwas fehlte.
+   *
+   * Die halbe Sekunde vorweg ist kein Puffer auf Verdacht: zu() schiebt die
+   * Schublade über den Schleier wieder zu, und mitten in dieser Bewegung
+   * gilt die Leiste noch als sichtbar. Wer da hinsieht, hält eine
+   * schließende Schublade für offen, klickt gegen den Schleier ins Leere —
+   * und es ist jede zweite Prüfung rot.
+   */
+  const leisteOeffnen = async () => {
+    await p.waitForTimeout(500);
+    const leiste = p.locator('.rail').first();
+    if (await leiste.isVisible()) return;
+    await p.locator('.header__menue').click();
+    await leiste.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+    await p.waitForTimeout(400);
+  };
+
   /* ── Die Fenster aus der linken Leiste ─────────────────────── */
   for (const [reiter, name] of [
     ['tasks', 'Aufgaben'], ['calendar', 'Kalender'], ['files', 'Dateien'],
@@ -108,6 +132,7 @@ for (const [breite, hoehe, beruehrung] of [
        Prüfung weiter in der Leiste und war rot, ohne dass etwas kaputt war. */
     ['stern-team', 'Teamverwaltung'],
   ]) {
+    await leisteOeffnen();
     if (reiter.startsWith('stern-')) {
       await p.locator('.rail [data-tour="stern"]').click();
       await p.waitForTimeout(400);
@@ -130,6 +155,7 @@ for (const [breite, hoehe, beruehrung] of [
 
   /* ── Fenster über Fenstern ─────────────────────────────────── */
   await pruefe('Aufgabe anlegen (im Brett)', async () => {
+    await leisteOeffnen();
     await p.locator('.rail [data-tour="tasks"]').click();
     await p.waitForSelector('.panel');
     await p.locator('.panel__head .pill--accent').click();
@@ -139,6 +165,7 @@ for (const [breite, hoehe, beruehrung] of [
   await zu();
 
   await pruefe('Aufgabe bearbeiten (Ansicht über dem Brett)', async () => {
+    await leisteOeffnen();
     await p.locator('.rail [data-tour="tasks"]').click();
     await p.waitForSelector('.panel');
     await p.waitForTimeout(600);
@@ -156,6 +183,7 @@ for (const [breite, hoehe, beruehrung] of [
   await zu();
 
   await pruefe('Termin anlegen (über dem Kalender)', async () => {
+    await leisteOeffnen();
     await p.locator('.rail [data-tour="calendar"]').click();
     await p.waitForSelector('.week', { timeout: 8000 });
     await p.locator('.panel__head .pill--accent').click();
@@ -165,6 +193,7 @@ for (const [breite, hoehe, beruehrung] of [
   await zu();
 
   await pruefe('Idee einbringen (über dem Board)', async () => {
+    await leisteOeffnen();
     await p.locator('.rail [data-tour="ideas"]').click();
     await p.waitForSelector('.idea-bar', { timeout: 8000 });
     await p.locator('.panel__head .pill--accent').click();
@@ -238,6 +267,7 @@ for (const [breite, hoehe, beruehrung] of [
   await zu();
 
   await pruefe('Profilkarte', async () => {
+    await leisteOeffnen();
     await p.locator('.rail [data-tour="settings"]').click();
     await p.waitForTimeout(700);
     const r = await misst();
