@@ -348,7 +348,7 @@ function hinweis(lage: LokaleLage | null): Pick<AiCapabilities, 'note' | 'noteCo
   if (provider.name === 'demo') {
     return {
       noteCode: 'hinweis.keinSchluessel', noteWerte: null,
-      note: 'Kein API-Schlüssel gesetzt. Trage GROQ_API_KEY in die .env ein oder stelle auf ein lokales Modell um.',
+      note: 'Kein API-Schlüssel gesetzt. Trage ihn unter „Einstellungen → Schlüssel → Sprachmodelle" ein oder stelle auf ein lokales Modell um.',
     };
   }
   if (a === null) {

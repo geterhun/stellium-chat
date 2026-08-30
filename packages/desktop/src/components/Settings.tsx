@@ -4,7 +4,7 @@ import { Bell, Cpu, Globe, KeyRound, Loader2, Lock, LogOut, Mail, Palette, Refre
 import { LANGUAGES, type AiCapabilities, type AiModelInfo } from '@stellium/shared';
 import { pushSynchronisieren, useStore } from '../state/store.js';
 import { useFokusfalle } from './Fokusfalle.jsx';
-import { api, serverUrl, setServerUrl } from '../net/api.js';
+import { api, serverUrl, setServerUrl, type AnbieterSchluesselStand } from '../net/api.js';
 import { Avatar } from './Avatar.jsx';
 import { Profilbild } from './Profilbild.jsx';
 import { languageInfo } from '../lib/format.js';
@@ -615,6 +615,11 @@ function SchluesselEinstellungen() {
     letzterFehler: string | null;
   } | null>(null);
   const [fernStand, setFernStand] = useState<{ hinterlegt: boolean } | null>(null);
+  /* Der Groq-Schlüssel steht nicht im selben Speicher wie alles andere hier:
+     er liegt im Tresor neben der Datenbank und nicht in ihr, weil der Server
+     ihn schon beim Start braucht — vor der ersten Anmeldung. Deshalb eine
+     eigene Route und ein eigener Stand. */
+  const [groqStand, setGroqStand] = useState<AnbieterSchluesselStand | null>(null);
 
   const [versand, setVersand] = useState('');
   const [eingang, setEingang] = useState('');
@@ -627,6 +632,7 @@ function SchluesselEinstellungen() {
   const [patreonRefreshToken, setPatreonRefreshToken] = useState('');
   const [fernAdresse, setFernAdresse] = useState('');
   const [fernPasswort, setFernPasswort] = useState('');
+  const [groq, setGroq] = useState('');
   const [laeuft, setLaeuft] = useState(false);
 
   useEffect(() => {
@@ -638,6 +644,9 @@ function SchluesselEinstellungen() {
     }).catch(() => {});
     void api.patreonErneuerungsStand().then(setPatreonErneuerung).catch(() => {});
     void api.fernStand().then(setFernStand).catch(() => {});
+    /* Nur die Leitung darf das sehen; für alle anderen antwortet der Server
+       mit 403, und der Abschnitt bleibt bei seinem bisherigen Hinweis. */
+    void api.anbieterSchluessel().then((s) => setGroqStand(s.groq)).catch(() => {});
   }, []);
 
   /* Im Browser gewürfelt statt getippt: ein selbst ausgedachtes Wort ist
@@ -705,6 +714,12 @@ function SchluesselEinstellungen() {
         });
         setFernStand(await api.fernStand());
         setFernAdresse(''); setFernPasswort('');
+        gespeichert = true;
+      }
+      if (groq.trim()) {
+        const antwort = await api.anbieterSchluesselSetzen(groq.trim());
+        setGroqStand(antwort.groq);
+        setGroq('');
         gespeichert = true;
       }
       if (gespeichert) toast({ kind: 'ok', title: t('schluessel.gespeichert') });
@@ -801,6 +816,27 @@ function SchluesselEinstellungen() {
 
       <h3 className="ai-section__title">{t('schluessel.anbieter')}</h3>
       <p className="field__hint">{t('schluessel.anbieterHinweis')}</p>
+      {groqStand && (
+        <>
+          <GeheimFeld label={t('schluessel.groq')} stand={groqStand.hinterlegt}
+                      wert={groq} setWert={setGroq} platzhalter="gsk_..." />
+          {/* Ein Schlüssel aus der .env schlägt den Tresor (siehe secret() in
+              config.ts). Ohne diesen Hinweis trüge man hier einen neuen ein,
+              läse „Gespeichert" und suchte danach lange, warum weiter der
+              alte benutzt wird. */}
+          {groqStand.ausUmgebung && (
+            <p className="field__hint" style={{ color: 'var(--amber)' }}>
+              {t('schluessel.groqAusUmgebung')}
+            </p>
+          )}
+          {!groqStand.aenderbar && (
+            <p className="field__hint" style={{ color: 'var(--amber)' }}>
+              {t('schluessel.groqKeinMasterpasswort')}
+            </p>
+          )}
+          <p className="field__hint">{t('schluessel.groqHint')}</p>
+        </>
+      )}
 
       <button className="btn btn--primary" disabled={laeuft} onClick={() => void speichern()}>
         <KeyRound size={15} /> {t('common.save')}

@@ -338,6 +338,32 @@ await pruefe('Kommentieren und Stand ändern', async () => {
 
 await zu();
 
+/* ── Der Groq-Schlüssel in den Einstellungen ──────────────────────
+   Geprüft wird, dass das Feld da ist, verdeckt eingibt und dass der Server
+   Unsinn abweist. NICHT geprüft wird das erfolgreiche Speichern: das legte
+   einen erfundenen Schlüssel im Tresor ab und überschriebe damit den echten,
+   der sich hinterher nicht zurückholen lässt — angezeigt wird er ja nie
+   wieder. Ein Prüflauf darf die Übersetzung nicht stillegen. */
+await pruefe('Groq-Schlüssel steht in den Einstellungen unter „Schlüssel"', async () => {
+  await seite.locator('.rail [data-tour="settings"]').click();
+  await seite.waitForSelector('.panel');
+  await seite.locator('.tab:has-text("Schlüssel")').first().click();
+  await seite.waitForTimeout(1200);
+
+  const feld = seite.locator('.field:has(.field__label:has-text("Groq")) input');
+  if (await feld.count() !== 1) throw new Error(`${await feld.count()} Groq-Felder statt einem`);
+  if (await feld.getAttribute('type') !== 'password') throw new Error('Der Schlüssel stünde im Klartext da');
+
+  await feld.fill('das ist kein schluessel');
+  await seite.locator('.btn--primary:has-text("Speichern")').first().click();
+  await seite.waitForTimeout(1500);
+  const text = await seite.locator('body').innerText();
+  if (!/API-Schlüssel aus|zu kurz/i.test(text)) throw new Error('Unsinn wurde nicht abgewiesen');
+  await feld.fill('');
+});
+
+await zu();
+
 await seite.screenshot({ path: `${SHOTS}/final.png`, fullPage: false });
 
 const fehler = ergebnisse.filter((r) => r[0] === 'fehler');

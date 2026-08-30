@@ -201,6 +201,11 @@ function SternMenue({ eintraege }: {
               key={e.id}
               className="sternmenue__zeile"
               role="menuitem"
+              /* Ein Griff für die Prüfläufe. Ohne ihn blieb den Prüfungen nur
+                 der sichtbare Text — und der wechselt mit der Sprache. Genau
+                 daran ist die Prüfung der Teamverwaltung hängengeblieben,
+                 nachdem sie aus der Leiste hierher gewandert ist. */
+              data-tour={`stern-${e.id}`}
               onClick={() => { setOffen(false); e.tun(); }}
             >
               <span className="sternmenue__symbol">{e.symbol}</span>
