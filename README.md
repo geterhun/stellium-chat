@@ -305,11 +305,17 @@ Netz liegt. Im Renderer sind `contextIsolation` an und `nodeIntegration` aus.
 
 ## KI einrichten
 
-Schlüssel holen: <https://console.groq.com/keys>, dann:
+Schlüssel holen: <https://console.groq.com/keys>, dann entweder in der App
+unter **Einstellungen → Schlüssel → Sprachmodelle** eintragen — das ist der
+kürzere Weg, gilt sofort und braucht keine SSH-Sitzung — oder auf dem Server:
 
 ```bash
 npm run secret -w @stellium/server -- setzen groq
 ```
+
+Beide Wege legen denselben verschlüsselten Wert im Tresor ab. Steht
+`GROQ_API_KEY` in der `.env`, gewinnt die Umgebung; die Einstellungen sagen das
+dann auch, statt den Eintrag stillschweigend wirkungslos zu lassen.
 
 **Die Modelle sucht der Server sich selbst.** Beim Start fragt er Groqs Liste
 ab, sortiert alles aus, was keine Chat-Anfragen beantwortet (Whisper, TTS,

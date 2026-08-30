@@ -165,11 +165,18 @@ function openVault(): Record<string, string> {
   return vaultSecrets;
 }
 
+/* Jede Warnung nur einmal. Seit die Anbieterschlüssel Getter sind (siehe
+   config.ai.groq weiter unten), läuft secret() bei jedem Zugriff — ohne diese
+   Sperre stünde derselbe Satz nach kurzer Zeit hundertfach im Protokoll und
+   verdeckte alles andere. */
+const gewarnt = new Set<string>();
+
 /** Schlüssel holen: erst Umgebung, dann Tresor. */
 function secret(envName: string, vaultName: string): string {
   const fromEnv = str(envName);
   if (fromEnv) {
-    if (vault.exists() && openVault()[vaultName]) {
+    if (!gewarnt.has(envName) && vault.exists() && openVault()[vaultName]) {
+      gewarnt.add(envName);
       console.warn(
         `[secrets] ${envName} steht im Klartext in der Umgebung und überschreibt den`
         + ' verschlüsselten Wert. Entferne die Zeile aus der .env, damit der Tresor greift.',
@@ -238,7 +245,13 @@ export const config = {
   ai: {
     provider: (str('AI_PROVIDER', 'groq') as AiProvider),
     groq: {
-      apiKey: secret('GROQ_API_KEY', 'groq'),
+      /* Ein Getter, kein fester Wert: der Schlüssel lässt sich in den
+         Einstellungen wechseln (siehe anbieterSchluesselSetzen weiter unten).
+         Stünde hier das Ergebnis von secret() vom Serverstart, liefe der
+         Server nach einem Wechsel weiter mit dem alten Schlüssel — und der
+         Wechsel wäre eine Falle statt einer Einstellung. openVault()
+         zwischenspeichert, jeder weitere Aufruf kostet also nichts. */
+      get apiKey() { return secret('GROQ_API_KEY', 'groq'); },
       baseUrl: str('GROQ_BASE_URL', 'https://api.groq.com/openai/v1'),
       // Leer = der Server holt die Modell-Liste bei Groq und wählt selbst.
       // Eine gesetzte ID nagelt das Modell fest.
@@ -246,13 +259,15 @@ export const config = {
       fastModel: str('GROQ_FAST_MODEL'),
     },
     openai: {
-      apiKey: secret('OPENAI_API_KEY', 'openai'),
+      /* Getter aus demselben Grund wie bei Groq darüber. */
+      get apiKey() { return secret('OPENAI_API_KEY', 'openai'); },
       baseUrl: str('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
       model: str('OPENAI_MODEL'),
       fastModel: str('OPENAI_FAST_MODEL'),
     },
     deepl: {
-      apiKey: secret('DEEPL_API_KEY', 'deepl'),
+      /* Getter aus demselben Grund wie bei Groq darüber. */
+      get apiKey() { return secret('DEEPL_API_KEY', 'deepl'); },
       get baseUrl() {
         /* Derselbe Weg wie für `apiKey` darüber — Umgebung ODER Tresor, nicht
            nur die Umgebung. Hier stand `str('DEEPL_API_KEY')`, und der las
@@ -439,3 +454,94 @@ export function laufzeitSetzen(werte: {
    Feld, das wie eine HTTP-Antwort geformt war und damit nur darauf wartete,
    ausgeliefert zu werden. Ein gekürzter Schlüssel ist immer noch ein Schlüssel.
    Wer so eine Auskunft braucht: Herkunft ja, Wert nein, auch nicht in Teilen. */
+
+/* ── Anbieterschlüssel zur Laufzeit wechseln ──────────────────── */
+
+/**
+ * Die Schlüssel der Sprachmodell-Anbieter, wie sie im Tresor heißen.
+ *
+ * Bis hierher wechselte man sie nur auf dem Server selbst: `npm run secret`
+ * über eine SSH-Sitzung, danach ein Neustart. Läuft ein Groq-Schlüssel ab
+ * oder wird er zurückgezogen, steht die Übersetzung so lange still, bis
+ * jemand mit Zugang zum Pi Zeit hat — obwohl der neue Schlüssel längst da
+ * ist. Deshalb derselbe Weg wie für alle anderen Geheimnisse: eintragen in
+ * den Einstellungen, verschlüsselt abgelegt, nie wieder angezeigt.
+ */
+export type AnbieterSchluessel = 'groq' | 'openai' | 'deepl';
+
+const anbieterUmgebungsname: Record<AnbieterSchluessel, string> = {
+  groq: 'GROQ_API_KEY',
+  openai: 'OPENAI_API_KEY',
+  deepl: 'DEEPL_API_KEY',
+};
+
+export interface SchluesselStand {
+  /** Liegt überhaupt ein Schlüssel vor — aus der Umgebung oder aus dem Tresor? */
+  hinterlegt: boolean;
+  /**
+   * Der Wert kommt aus der .env und schlägt den Tresor (siehe secret()).
+   * Wer das nicht weiß, trägt hier einen neuen Schlüssel ein, sieht
+   * „Gespeichert" und wundert sich, dass weiter der alte benutzt wird.
+   */
+  ausUmgebung: boolean;
+  /** Ob sich der Tresor öffnen lässt — ohne ihn ist Eintragen zwecklos. */
+  tresor: 'aus' | 'offen' | 'verschlossen';
+  /** Lässt sich hier überhaupt etwas eintragen? Sonst fehlt das Masterpasswort. */
+  aenderbar: boolean;
+}
+
+export function anbieterSchluesselStand(name: AnbieterSchluessel): SchluesselStand {
+  const ausUmgebung = Boolean(str(anbieterUmgebungsname[name]));
+  const hinterlegt = Boolean(secret(anbieterUmgebungsname[name], name));
+  return {
+    hinterlegt,
+    ausUmgebung,
+    tresor: vaultStatus,
+    aenderbar: resolvePassphrase() !== null,
+  };
+}
+
+/**
+ * Einen Anbieterschlüssel eintragen oder wechseln.
+ *
+ * Bewusst neu von der Platte gelesen statt aus dem Zwischenspeicher: ist der
+ * Tresor beim Start nicht aufgegangen, steht dort ein leeres Objekt — mit dem
+ * als Grundlage zu speichern löschte alle anderen Schlüssel gleich mit.
+ * Lieber gar nicht speichern als die Postfach- und Verkaufszugänge verlieren.
+ */
+export function anbieterSchluesselSetzen(name: AnbieterSchluessel, wert: string): void {
+  const geputzt = wert.trim();
+  if (!geputzt) throw new Error('Der Schlüssel ist leer.');
+
+  const passwort = resolvePassphrase();
+  if (!passwort) {
+    throw new Error(
+      'Es gibt kein Masterpasswort, mit dem sich der Tresor verschlüsseln ließe. '
+      + 'Setze STELLIUM_MASTER_PASSPHRASE auf dem Server oder lege das Passwort '
+      + 'mit "npm run secret -w @stellium/server -- setzen groq" in der Keychain ab.',
+    );
+  }
+
+  let bestand: Record<string, string> = {};
+  if (vault.exists()) {
+    try {
+      bestand = vault.load(passwort.passphrase);
+    } catch (err) {
+      throw new Error(
+        `Der Tresor lässt sich mit dem hinterlegten Masterpasswort nicht öffnen (${(err as Error).message}). `
+        + 'Solange das so ist, wird hier nichts gespeichert — sonst wären die übrigen Schlüssel weg.',
+      );
+    }
+  }
+
+  bestand[name] = geputzt;
+  vault.save(bestand, passwort.passphrase);
+  /* Den Zwischenspeicher mitziehen, damit die Getter in config.ai sofort den
+     neuen Wert liefern. Ohne das griffe der Wechsel erst nach einem Neustart. */
+  vaultSecrets = bestand;
+  vaultStatus = 'offen';
+  /* Die Sperre für diesen Namen lösen: wer gerade einen Schlüssel eingetragen
+     hat, während die .env einen anderen vorgibt, soll den Hinweis darauf
+     wieder zu sehen bekommen — auch wenn er beim Start schon einmal kam. */
+  gewarnt.delete(anbieterUmgebungsname[name]);
+}

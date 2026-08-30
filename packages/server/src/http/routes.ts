@@ -23,13 +23,14 @@ import {
   PERMISSIONS, PERMISSION_KEYS, ROLES, ROLE_DEFAULTS, roleInfo,
   type MemberRole, type PermissionKey,
 } from '@stellium/shared';
-import { config } from '../config.js';
+import { anbieterSchluesselSetzen, anbieterSchluesselStand, config } from '../config.js';
 import { db, placeholders } from '../db/index.js';
 import { kennungVon } from '../util/abweisung.js';
 import { newId } from '../util/id.js';
 import {
-  addGlossaryEntry, aiCapabilities, anbieterWaehlen, cachedReleaseNotes, chooseModels, listGlossary,
-  lokalePruefung, modelRegistry, removeGlossaryEntry, translateReleaseNotes,
+  addGlossaryEntry, aiCapabilities, anbieterWaehlen, cachedReleaseNotes, chooseModels,
+  dropForeignTranslations, listGlossary, lokalePruefung, modelRegistry, providerNeuAufbauen,
+  removeGlossaryEntry, translateReleaseNotes,
 } from '../translation/index.js';
 import { search } from '../services/search.js';
 import * as store from '../services/store.js';
@@ -748,6 +749,62 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       userId,
     });
     return { ai: aiCapabilities(), selection: modelRegistry()?.current ?? null };
+  });
+
+  /* ── Der Schlüssel des Sprachmodell-Anbieters ─────────────────
+     Bisher nur auf dem Server selbst zu wechseln (npm run secret, dann
+     Neustart). Läuft ein Schlüssel ab, steht die Übersetzung so lange still,
+     bis jemand mit SSH-Zugang Zeit hat. Dieselbe Rechteprüfung wie bei der
+     Anbieterwahl darunter: eine Sache für die Team-Leitung. */
+  app.get('/api/ai/schluessel', async (req, reply) => {
+    const userId = requireUser(req);
+    const self = store.getSelf(userId);
+    if (self?.role !== 'owner' && self?.role !== 'admin') {
+      return fehler(reply, 403, 'fehler.keinRecht', 'Dafür fehlt dir das Recht.');
+    }
+    return { groq: anbieterSchluesselStand('groq') };
+  });
+
+  app.post('/api/ai/schluessel', async (req, reply) => {
+    const userId = requireUser(req);
+    const self = store.getSelf(userId);
+    if (self?.role !== 'owner' && self?.role !== 'admin') {
+      return fehler(reply, 403, 'fehler.keinRecht', 'Dafür fehlt dir das Recht.');
+    }
+
+    const körper = req.body as { groq?: string };
+    const wert = typeof körper?.groq === 'string' ? körper.groq.trim() : '';
+    if (!wert) {
+      return fehler(reply, 400, 'fehler.schluesselLeer', 'Es wurde kein Schlüssel mitgeschickt.');
+    }
+    /* Ein versehentlich eingefügter Satz statt eines Schlüssels soll hier
+       auffallen und nicht erst an der nächsten Übersetzung: Groq-Schlüssel
+       beginnen mit "gsk_" und enthalten keine Leerzeichen. Die Form wird
+       geprüft, nicht die Gültigkeit — das entscheidet Groq. */
+    if (/\s/.test(wert) || wert.length < 20) {
+      return fehler(reply, 400, 'fehler.schluesselForm',
+        'Das sieht nicht nach einem API-Schlüssel aus (zu kurz oder mit Leerzeichen).');
+    }
+
+    try {
+      anbieterSchluesselSetzen('groq', wert);
+    } catch (err) {
+      /* Die Meldung des Tresors geht unverändert mit: „kein Masterpasswort"
+         und „Tresor lässt sich nicht öffnen" verlangen ganz verschiedene
+         Schritte, und hinter einem allgemeinen Satz wäre nicht zu erraten,
+         welcher davon gemeint ist. */
+      const grund = (err as Error).message;
+      return fehler(reply, 400, 'fehler.schluesselSpeichern', grund, { grund });
+    }
+
+    /* Sofort wirksam statt erst nach einem Neustart — sonst wäre die
+       Einstellung eine Falle. Lief der Server bis eben ohne Schlüssel, hat
+       der Demo-Provider unübersetzten Text abgelegt; der muss weg, sonst
+       bleibt er für immer stehen (siehe dropForeignTranslations). */
+    await providerNeuAufbauen();
+    dropForeignTranslations();
+
+    return { groq: anbieterSchluesselStand('groq'), ai: aiCapabilities() };
   });
 
   /** Nachsehen, was ein lokaler Dienst anbietet — ohne etwas umzustellen. */

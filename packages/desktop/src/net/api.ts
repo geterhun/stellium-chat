@@ -155,6 +155,20 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
 }
 
+/**
+ * Wie es um einen Anbieterschlüssel steht — ohne den Schlüssel selbst.
+ *
+ * `ausUmgebung` ist der Fallstrick, den es sichtbar zu machen gilt: steht der
+ * Schlüssel in der .env des Servers, schlägt er den Tresor, und ein hier
+ * eingetragener Wert läge zwar richtig, würde aber nicht benutzt.
+ */
+export interface AnbieterSchluesselStand {
+  hinterlegt: boolean;
+  ausUmgebung: boolean;
+  tresor: 'aus' | 'offen' | 'verschlossen';
+  aenderbar: boolean;
+}
+
 /** Was der Server nach einem Upload über die Datei zurückgibt. */
 export interface Anhang {
   id: string; messageId: string | null; name: string; mime: string; size: number;
@@ -722,6 +736,13 @@ export const api = {
       summen: Record<'heute' | 'woche' | 'monat' | 'jahr', number>;
       verlauf: { tag: string; sekunden: number }[];
     }>(`/api/praesenz/${encodeURIComponent(userId)}?zeitraum=${zeitraum}`),
+
+  /* Der Schlüssel des Sprachmodell-Anbieters. Zurück kommt nie der Wert,
+     nur ob einer liegt, woher er stammt und ob sich hier überhaupt etwas
+     eintragen lässt. */
+  anbieterSchluessel: () => request<{ groq: AnbieterSchluesselStand }>('/api/ai/schluessel'),
+  anbieterSchluesselSetzen: (groq: string) => request<{ groq: AnbieterSchluesselStand }>(
+    '/api/ai/schluessel', { method: 'POST', body: JSON.stringify({ groq }) }),
 
   verkaufZugang: () => request<{ hinterlegt: boolean; verschluesselt: boolean }>('/api/verkauf/zugang'),
   verkaufZugangSetzen: (token: string) => request<{ hinterlegt: boolean }>(
