@@ -102,9 +102,18 @@ for (const [breite, hoehe, beruehrung] of [
   for (const [reiter, name] of [
     ['tasks', 'Aufgaben'], ['calendar', 'Kalender'], ['files', 'Dateien'],
     ['ideas', 'Ideenboard'], ['reminders', 'Erinnerungen'], ['settings', 'Einstellungen'],
-    ['team', 'Teamverwaltung'],
+    /* Die Teamverwaltung steht nicht mehr in der Leiste, sondern hinter dem
+       Stern (siehe Rail.tsx). Der Eintrag dort trägt denselben Griff mit dem
+       Vorsatz "stern-"; erst muss also das Menü auf. Vorher suchte die
+       Prüfung weiter in der Leiste und war rot, ohne dass etwas kaputt war. */
+    ['stern-team', 'Teamverwaltung'],
   ]) {
-    const knopf = p.locator(`.rail [data-tour="${reiter}"]`);
+    if (reiter.startsWith('stern-')) {
+      await p.locator('.rail [data-tour="stern"]').click();
+      await p.waitForTimeout(400);
+    }
+    const knopf = p.locator(reiter.startsWith('stern-')
+      ? `[data-tour="${reiter}"]` : `.rail [data-tour="${reiter}"]`);
     /* Ein fehlender Knopf war bisher ein stiller Übersprung: die Prüfung
        verschwand aus der Liste, statt rot zu werden, und „7/7 bestanden"
        wurde eben zu „3/3 bestanden". Fehlt die Leiste ganz, blieb von diesem
