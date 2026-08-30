@@ -1173,7 +1173,7 @@ export const tr = {
   'fehler.nichtGefunden': 'Bulunamadı',
   'hinweis.lokalStumm': '{adresse} adresindeki model yanıt vermiyor ({fehler}). Model geri gelene kadar mesajlar çevrilmeden kalır.',
   'hinweis.lokalOhneModell': '{adresse} adresinde yüklü model yok. Orada bir tane başlat, yoksa hiçbir şey çevrilmez.',
-  'hinweis.keinSchluessel': 'API anahtarı yok. GROQ_API_KEY’i .env dosyasına yaz ya da yerel bir modele geç.',
+  'hinweis.keinSchluessel': 'API anahtarı ayarlanmadı. “Ayarlar → Anahtarlar → Dil modelleri” altından gir ya da yerel bir modele geç.',
   'hinweis.keinAssistent': '{anbieter} çeviriyor ama yapay zekâ özeti çıkaramıyor. Hepsi için Groq, OpenAI ya da yerel bir model seç.',
   'hinweis.keinAbtippen': 'Sesli mesajlar yazıya dökülmüyor. Bunun için sunucudaki ses hizmeti (server-setup/dienste/stimme-einrichten.sh) ya da bir Groq anahtarı gerekir.',
   'hinweis.stimmeBeiGroq': 'Metin modeli kendi ağınızda çalışıyor ama sesli mesajlar Groq’a gidiyor. server-setup/dienste/stimme-einrichten.sh ile onlar da burada kalır.',

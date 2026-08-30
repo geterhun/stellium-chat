@@ -1173,7 +1173,7 @@ export const ko = {
   'fehler.nichtGefunden': '찾을 수 없음',
   'hinweis.lokalStumm': '{adresse}의 모델이 응답하지 않습니다 ({fehler}). 다시 작동할 때까지 메시지는 번역되지 않습니다.',
   'hinweis.lokalOhneModell': '{adresse}에 로드된 모델이 없습니다. 거기서 하나 시작하지 않으면 아무것도 번역되지 않습니다.',
-  'hinweis.keinSchluessel': 'API 키가 없습니다. .env에 GROQ_API_KEY를 넣거나 로컬 모델로 바꾸세요.',
+  'hinweis.keinSchluessel': 'API 키가 설정되지 않았습니다. “설정 → 키 → 언어 모델”에서 입력하거나 로컬 모델로 전환하세요.',
   'hinweis.keinAssistent': '{anbieter}는 번역은 하지만 AI 요약은 못 합니다. 모두 쓰려면 Groq, OpenAI 또는 로컬 모델을 고르세요.',
   'hinweis.keinAbtippen': '음성 메시지는 받아쓰지 않습니다. 서버의 음성 서비스(server-setup/dienste/stimme-einrichten.sh)나 Groq 키가 필요합니다.',
   'hinweis.stimmeBeiGroq': '텍스트 모델은 자체 망에서 돌지만 음성 메시지는 Groq으로 갑니다. server-setup/dienste/stimme-einrichten.sh를 쓰면 음성도 여기 남습니다.',

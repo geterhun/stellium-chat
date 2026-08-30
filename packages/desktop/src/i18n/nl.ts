@@ -1173,7 +1173,7 @@ export const nl = {
   'fehler.nichtGefunden': 'Niet gevonden',
   'hinweis.lokalStumm': 'Het model op {adresse} antwoordt niet ({fehler}). Berichten blijven onvertaald tot het weer draait.',
   'hinweis.lokalOhneModell': 'Op {adresse} is geen model geladen. Start er daar een, anders wordt niets vertaald.',
-  'hinweis.keinSchluessel': 'Geen API-sleutel ingesteld. Zet GROQ_API_KEY in de .env of schakel over op een lokaal model.',
+  'hinweis.keinSchluessel': 'Geen API-sleutel ingesteld. Voer er een in bij “Instellingen → Sleutels → Taalmodellen”, of schakel over op een lokaal model.',
   'hinweis.keinAssistent': '{anbieter} vertaalt wel, maar kan geen AI-samenvattingen. Kies voor alles Groq, OpenAI of een lokaal model.',
   'hinweis.keinAbtippen': 'Spraakberichten worden niet uitgetypt. Daarvoor is de spraakdienst op de server nodig (server-setup/dienste/stimme-einrichten.sh) of een Groq-sleutel.',
   'hinweis.stimmeBeiGroq': 'Het tekstmodel draait in het eigen netwerk, maar spraakberichten gaan naar Groq. Met server-setup/dienste/stimme-einrichten.sh blijven ook die hier.',

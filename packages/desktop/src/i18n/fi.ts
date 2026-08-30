@@ -1173,7 +1173,7 @@ export const fi = {
   'fehler.nichtGefunden': 'Ei löytynyt',
   'hinweis.lokalStumm': 'Malli osoitteessa {adresse} ei vastaa ({fehler}). Viestit jäävät kääntämättä, kunnes se toimii taas.',
   'hinweis.lokalOhneModell': 'Osoitteessa {adresse} ei ole ladattuna mallia. Käynnistä siellä yksi, muuten mitään ei käännetä.',
-  'hinweis.keinSchluessel': 'API-avainta ei ole asetettu. Lisää GROQ_API_KEY .env-tiedostoon tai vaihda paikalliseen malliin.',
+  'hinweis.keinSchluessel': 'API-avainta ei ole asetettu. Lisää se kohdassa “Asetukset → Avaimet → Kielimallit” tai vaihda paikalliseen malliin.',
   'hinweis.keinAssistent': '{anbieter} kääntää, mutta ei osaa tekoälytiivistelmiä. Valitse Groq, OpenAI tai paikallinen malli, niin kaikki toimii.',
   'hinweis.keinAbtippen': 'Ääniviestejä ei kirjoiteta auki. Siihen tarvitaan palvelimen puhepalvelu (server-setup/dienste/stimme-einrichten.sh) tai Groq-avain.',
   'hinweis.stimmeBeiGroq': 'Tekstimalli pyörii omassa verkossa, mutta ääniviestit menevät Groqille. Komennolla server-setup/dienste/stimme-einrichten.sh myös ne pysyvät täällä.',

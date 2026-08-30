@@ -1228,7 +1228,7 @@ export const de = {
   'fehler.nichtGefunden': 'Nicht gefunden',
   'hinweis.lokalStumm': 'Das Modell unter {adresse} antwortet nicht ({fehler}). Nachrichten bleiben unübersetzt, bis es wieder läuft.',
   'hinweis.lokalOhneModell': 'Unter {adresse} ist kein Modell geladen. Dort eines starten, sonst bleibt alles unübersetzt.',
-  'hinweis.keinSchluessel': 'Kein API-Schlüssel gesetzt. Trage GROQ_API_KEY in die .env ein oder stelle auf ein lokales Modell um.',
+  'hinweis.keinSchluessel': 'Kein API-Schlüssel gesetzt. Trage ihn unter „Einstellungen → Schlüssel → Sprachmodelle" ein oder stelle auf ein lokales Modell um.',
   'hinweis.keinAssistent': '{anbieter} übersetzt, kann aber keine KI-Zusammenfassungen. Für alle Funktionen Groq, OpenAI oder ein lokales Modell wählen.',
   'hinweis.keinAbtippen': 'Sprachnachrichten werden nicht abgetippt. Dafür bräuchte es den Sprachdienst auf dem Server (server-setup/dienste/stimme-einrichten.sh) oder einen Groq-Schlüssel.',
   'hinweis.stimmeBeiGroq': 'Das Textmodell läuft im eigenen Netz, Sprachnachrichten gehen aber an Groq. Mit server-setup/dienste/stimme-einrichten.sh bleiben auch sie hier.',

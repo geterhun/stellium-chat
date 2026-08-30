@@ -1173,7 +1173,7 @@ export const ja = {
   'fehler.nichtGefunden': '見つかりません',
   'hinweis.lokalStumm': '{adresse} のモデルが応答しません ({fehler})。復旧するまでメッセージは翻訳されません。',
   'hinweis.lokalOhneModell': '{adresse} にモデルが読み込まれていません。そこで起動しないと何も翻訳されません。',
-  'hinweis.keinSchluessel': 'APIキーが設定されていません。.env に GROQ_API_KEY を入れるか、ローカルモデルに切り替えてください。',
+  'hinweis.keinSchluessel': 'API キーが設定されていません。「設定 → キー → 言語モデル」で入力するか、ローカルモデルに切り替えてください。',
   'hinweis.keinAssistent': '{anbieter} は翻訳できますが、AI要約はできません。すべて使うには Groq、OpenAI、またはローカルモデルを選んでください。',
   'hinweis.keinAbtippen': '音声メッセージは文字起こしされません。サーバーの音声サービス（server-setup/dienste/stimme-einrichten.sh）か Groq のキーが必要です。',
   'hinweis.stimmeBeiGroq': 'テキストモデルは自社ネットワーク内で動いていますが、音声メッセージは Groq に送られます。server-setup/dienste/stimme-einrichten.sh を使えば音声もここに留まります。',

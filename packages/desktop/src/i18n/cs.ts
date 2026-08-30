@@ -1187,7 +1187,7 @@ export const cs = {
   'fehler.nichtGefunden': 'Nenalezeno',
   'hinweis.lokalStumm': 'Model na {adresse} neodpovídá ({fehler}). Zprávy zůstanou nepřeložené, dokud zase nepoběží.',
   'hinweis.lokalOhneModell': 'Na {adresse} není načtený žádný model. Spusť tam nějaký, jinak se nic nepřeloží.',
-  'hinweis.keinSchluessel': 'Není nastavený API klíč. Doplň GROQ_API_KEY do .env nebo přepni na místní model.',
+  'hinweis.keinSchluessel': 'Není nastaven klíč API. Zadej ho v „Nastavení → Klíče → Jazykové modely“ nebo přepni na místní model.',
   'hinweis.keinAssistent': '{anbieter} překládá, ale neumí shrnutí od AI. Pro všechno zvol Groq, OpenAI nebo místní model.',
   'hinweis.keinAbtippen': 'Hlasové zprávy se nepřepisují. Je k tomu potřeba hlasová služba na serveru (server-setup/dienste/stimme-einrichten.sh) nebo klíč Groq.',
   'hinweis.stimmeBeiGroq': 'Textový model běží ve vlastní síti, hlasové zprávy ale jdou do Groq. Se server-setup/dienste/stimme-einrichten.sh zůstanou tady i ony.',

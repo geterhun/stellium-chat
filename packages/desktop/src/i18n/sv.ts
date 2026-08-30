@@ -1173,7 +1173,7 @@ export const sv = {
   'fehler.nichtGefunden': 'Hittades inte',
   'hinweis.lokalStumm': 'Modellen på {adresse} svarar inte ({fehler}). Meddelanden förblir oöversatta tills den är igång igen.',
   'hinweis.lokalOhneModell': 'Ingen modell är laddad på {adresse}. Starta en där, annars översätts ingenting.',
-  'hinweis.keinSchluessel': 'Ingen API-nyckel angiven. Skriv GROQ_API_KEY i .env eller byt till en lokal modell.',
+  'hinweis.keinSchluessel': 'Ingen API-nyckel angiven. Ange en under “Inställningar → Nycklar → Språkmodeller”, eller byt till en lokal modell.',
   'hinweis.keinAssistent': '{anbieter} översätter, men klarar inte AI-sammanfattningar. Välj Groq, OpenAI eller en lokal modell för allt.',
   'hinweis.keinAbtippen': 'Röstmeddelanden skrivs inte ner. Det kräver taltjänsten på servern (server-setup/dienste/stimme-einrichten.sh) eller en Groq-nyckel.',
   'hinweis.stimmeBeiGroq': 'Textmodellen kör i ert eget nät, men röstmeddelanden går till Groq. Med server-setup/dienste/stimme-einrichten.sh stannar även de här.',

@@ -1173,7 +1173,7 @@ export const zh = {
   'fehler.nichtGefunden': '未找到',
   'hinweis.lokalStumm': '{adresse} 上的模型没有响应 ({fehler})。在它恢复之前，消息不会被翻译。',
   'hinweis.lokalOhneModell': '{adresse} 上没有加载模型。请在那里启动一个，否则什么都不会翻译。',
-  'hinweis.keinSchluessel': '没有设置 API 密钥。在 .env 中填入 GROQ_API_KEY，或改用本地模型。',
+  'hinweis.keinSchluessel': '未设置 API 密钥。请在“设置 → 密钥 → 语言模型”中填入，或改用本地模型。',
   'hinweis.keinAssistent': '{anbieter} 能翻译，但做不了 AI 摘要。要用全部功能，请选择 Groq、OpenAI 或本地模型。',
   'hinweis.keinAbtippen': '语音消息不会转成文字。这需要服务器上的语音服务（server-setup/dienste/stimme-einrichten.sh）或一个 Groq 密钥。',
   'hinweis.stimmeBeiGroq': '文本模型在自己的网络里运行，但语音消息会发给 Groq。用 server-setup/dienste/stimme-einrichten.sh 之后，它们也会留在本地。',

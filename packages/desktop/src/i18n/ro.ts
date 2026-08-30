@@ -1180,7 +1180,7 @@ export const ro = {
   'fehler.nichtGefunden': 'Nu a fost găsit',
   'hinweis.lokalStumm': 'Modelul de la {adresse} nu răspunde ({fehler}). Mesajele rămân netraduse până revine.',
   'hinweis.lokalOhneModell': 'La {adresse} nu este încărcat niciun model. Pornește unul acolo, altfel nu se traduce nimic.',
-  'hinweis.keinSchluessel': 'Nicio cheie API setată. Pune GROQ_API_KEY în .env sau treci pe un model local.',
+  'hinweis.keinSchluessel': 'Nicio cheie API setată. Introdu una în „Setări → Chei → Modele lingvistice” sau comută pe un model local.',
   'hinweis.keinAssistent': '{anbieter} traduce, dar nu poate face rezumate cu IA. Pentru tot, alege Groq, OpenAI sau un model local.',
   'hinweis.keinAbtippen': 'Mesajele vocale nu sunt transcrise. Ar fi nevoie de serviciul vocal pe server (server-setup/dienste/stimme-einrichten.sh) sau de o cheie Groq.',
   'hinweis.stimmeBeiGroq': 'Modelul de text rulează în rețeaua proprie, dar mesajele vocale pleacă la Groq. Cu server-setup/dienste/stimme-einrichten.sh rămân și ele aici.',

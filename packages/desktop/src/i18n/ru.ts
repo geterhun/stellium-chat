@@ -1187,7 +1187,7 @@ export const ru = {
   'fehler.nichtGefunden': 'Не найдено',
   'hinweis.lokalStumm': 'Модель по адресу {adresse} не отвечает ({fehler}). Сообщения останутся непереведёнными, пока она не заработает.',
   'hinweis.lokalOhneModell': 'По адресу {adresse} не загружено ни одной модели. Запусти там какую-нибудь, иначе ничего не переведётся.',
-  'hinweis.keinSchluessel': 'Ключ API не задан. Впиши GROQ_API_KEY в .env или переключись на локальную модель.',
+  'hinweis.keinSchluessel': 'Ключ API не задан. Введите его в «Настройки → Ключи → Языковые модели» или переключитесь на локальную модель.',
   'hinweis.keinAssistent': '{anbieter} переводит, но не умеет делать сводки ИИ. Для всего выбери Groq, OpenAI или локальную модель.',
   'hinweis.keinAbtippen': 'Голосовые сообщения не расшифровываются. Для этого нужна голосовая служба на сервере (server-setup/dienste/stimme-einrichten.sh) или ключ Groq.',
   'hinweis.stimmeBeiGroq': 'Текстовая модель работает в собственной сети, но голосовые сообщения уходят в Groq. С server-setup/dienste/stimme-einrichten.sh они тоже останутся здесь.',

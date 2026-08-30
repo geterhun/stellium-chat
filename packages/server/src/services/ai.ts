@@ -15,7 +15,9 @@ import {
 } from '../translation/fenster.js';
 
 export class AiUnavailable extends Error {
-  constructor() { super('KI ist nicht konfiguriert. Setze AI_PROVIDER=groq und GROQ_API_KEY.'); }
+  constructor() {
+    super('KI ist nicht konfiguriert. Trage einen Schlüssel unter „Einstellungen → Schlüssel → Sprachmodelle" ein.');
+  }
 }
 
 interface TranscriptRow {

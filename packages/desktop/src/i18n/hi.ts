@@ -1173,7 +1173,7 @@ export const hi = {
   'fehler.nichtGefunden': 'नहीं मिला',
   'hinweis.lokalStumm': '{adresse} पर मॉडल जवाब नहीं दे रहा ({fehler})। जब तक वह वापस न चले, संदेश बिना अनुवाद के रहेंगे।',
   'hinweis.lokalOhneModell': '{adresse} पर कोई मॉडल लोड नहीं है। वहाँ एक शुरू करें, वरना कुछ भी अनुवाद नहीं होगा।',
-  'hinweis.keinSchluessel': 'कोई API कुंजी सेट नहीं है। GROQ_API_KEY को .env में डालें या स्थानीय मॉडल पर जाएँ।',
+  'hinweis.keinSchluessel': 'कोई API कुंजी सेट नहीं है। उसे „सेटिंग्स → कुंजियाँ → भाषा मॉडल" में दर्ज करें, या किसी स्थानीय मॉडल पर स्विच करें।',
   'hinweis.keinAssistent': '{anbieter} अनुवाद करता है, पर AI सारांश नहीं बना सकता। सब कुछ चाहिए तो Groq, OpenAI या स्थानीय मॉडल चुनें।',
   'hinweis.keinAbtippen': 'वॉइस संदेश लिखे नहीं जाते। इसके लिए सर्वर पर वाक् सेवा (server-setup/dienste/stimme-einrichten.sh) या Groq कुंजी चाहिए।',
   'hinweis.stimmeBeiGroq': 'टेक्स्ट मॉडल आपके अपने नेटवर्क में चलता है, पर वॉइस संदेश Groq को जाते हैं। server-setup/dienste/stimme-einrichten.sh से वे भी यहीं रहेंगे।',

@@ -1209,7 +1209,7 @@ export const en: Partial<Dictionary> = {
   'fehler.nichtGefunden': 'Not found',
   'hinweis.lokalStumm': 'The model at {adresse} is not responding ({fehler}). Messages stay untranslated until it is back.',
   'hinweis.lokalOhneModell': 'No model is loaded at {adresse}. Start one there, otherwise nothing gets translated.',
-  'hinweis.keinSchluessel': 'No API key set. Put GROQ_API_KEY in the .env or switch to a local model.',
+  'hinweis.keinSchluessel': 'No API key set. Enter one under “Settings → Keys → Language models”, or switch to a local model.',
   'hinweis.keinAssistent': '{anbieter} translates but cannot do AI summaries. For everything, pick Groq, OpenAI or a local model.',
   'hinweis.keinAbtippen': 'Voice messages are not transcribed. That needs the speech service on the server (server-setup/dienste/stimme-einrichten.sh) or a Groq key.',
   'hinweis.stimmeBeiGroq': 'The text model runs on your own network, but voice messages go to Groq. With server-setup/dienste/stimme-einrichten.sh they stay here too.',

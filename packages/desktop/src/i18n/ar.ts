@@ -1201,7 +1201,7 @@ export const ar = {
   'fehler.nichtGefunden': 'غير موجود',
   'hinweis.lokalStumm': 'النموذج على {adresse} لا يستجيب ({fehler}). تبقى الرسائل بلا ترجمة حتى يعود للعمل.',
   'hinweis.lokalOhneModell': 'لا يوجد نموذج محمّل على {adresse}. شغّل واحدًا هناك، وإلا لن تُترجم أي رسالة.',
-  'hinweis.keinSchluessel': 'لا يوجد مفتاح API. ضع GROQ_API_KEY في ملف .env أو انتقل إلى نموذج محلي.',
+  'hinweis.keinSchluessel': 'لم يتم تعيين مفتاح API. أدخله من «الإعدادات ← المفاتيح ← نماذج اللغة»، أو بدّل إلى نموذج محلي.',
   'hinweis.keinAssistent': '{anbieter} يترجم، لكنه لا يستطيع عمل ملخّصات بالذكاء الاصطناعي. اختر Groq أو OpenAI أو نموذجًا محليًا لتعمل كل الوظائف.',
   'hinweis.keinAbtippen': 'الرسائل الصوتية لا تُفرَّغ نصًا. يلزم لذلك خدمة الصوت على الخادم (server-setup/dienste/stimme-einrichten.sh) أو مفتاح Groq.',
   'hinweis.stimmeBeiGroq': 'نموذج النص يعمل داخل شبكتكم، لكن الرسائل الصوتية تذهب إلى Groq. مع server-setup/dienste/stimme-einrichten.sh تبقى هي أيضًا هنا.',

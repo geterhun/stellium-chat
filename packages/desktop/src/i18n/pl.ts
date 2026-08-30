@@ -1187,7 +1187,7 @@ export const pl = {
   'fehler.nichtGefunden': 'Nie znaleziono',
   'hinweis.lokalStumm': 'Model pod {adresse} nie odpowiada ({fehler}). Wiadomości zostają nieprzetłumaczone, dopóki nie wróci.',
   'hinweis.lokalOhneModell': 'Pod {adresse} nie jest załadowany żaden model. Uruchom tam jakiś, inaczej nic się nie przetłumaczy.',
-  'hinweis.keinSchluessel': 'Brak klucza API. Wpisz GROQ_API_KEY w .env albo przełącz się na model lokalny.',
+  'hinweis.keinSchluessel': 'Brak klucza API. Wpisz go w „Ustawienia → Klucze → Modele językowe” albo przełącz się na model lokalny.',
   'hinweis.keinAssistent': '{anbieter} tłumaczy, ale nie zrobi podsumowań AI. Do wszystkiego wybierz Groq, OpenAI lub model lokalny.',
   'hinweis.keinAbtippen': 'Wiadomości głosowe nie są spisywane. Potrzebna jest usługa mowy na serwerze (server-setup/dienste/stimme-einrichten.sh) albo klucz Groq.',
   'hinweis.stimmeBeiGroq': 'Model tekstowy działa we własnej sieci, ale wiadomości głosowe idą do Groq. Z server-setup/dienste/stimme-einrichten.sh zostaną również tutaj.',

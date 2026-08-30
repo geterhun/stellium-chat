@@ -1173,7 +1173,7 @@ export const no = {
   'fehler.nichtGefunden': 'Ikke funnet',
   'hinweis.lokalStumm': 'Modellen på {adresse} svarer ikke ({fehler}). Meldinger blir stående uoversatt til den kjører igjen.',
   'hinweis.lokalOhneModell': 'Ingen modell er lastet på {adresse}. Start en der, ellers blir ingenting oversatt.',
-  'hinweis.keinSchluessel': 'Ingen API-nøkkel satt. Skriv GROQ_API_KEY i .env, eller bytt til en lokal modell.',
+  'hinweis.keinSchluessel': 'Ingen API-nøkkel satt. Legg inn en under “Innstillinger → Nøkler → Språkmodeller”, eller bytt til en lokal modell.',
   'hinweis.keinAssistent': '{anbieter} oversetter, men kan ikke lage KI-sammendrag. Velg Groq, OpenAI eller en lokal modell for alt.',
   'hinweis.keinAbtippen': 'Talemeldinger blir ikke skrevet ned. Det krever taletjenesten på serveren (server-setup/dienste/stimme-einrichten.sh) eller en Groq-nøkkel.',
   'hinweis.stimmeBeiGroq': 'Tekstmodellen kjører på deres eget nett, men talemeldinger går til Groq. Med server-setup/dienste/stimme-einrichten.sh blir også de her.',

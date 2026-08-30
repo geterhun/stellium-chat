@@ -1187,7 +1187,7 @@ export const uk = {
   'fehler.nichtGefunden': 'Не знайдено',
   'hinweis.lokalStumm': 'Модель за адресою {adresse} не відповідає ({fehler}). Повідомлення лишаються неперекладеними, доки вона не запрацює.',
   'hinweis.lokalOhneModell': 'За адресою {adresse} не завантажено жодної моделі. Запусти там якусь, інакше нічого не перекладеться.',
-  'hinweis.keinSchluessel': 'Ключ API не задано. Впиши GROQ_API_KEY у .env або перемкнися на локальну модель.',
+  'hinweis.keinSchluessel': 'Ключ API не задано. Введіть його в «Налаштування → Ключі → Мовні моделі» або перемкніться на локальну модель.',
   'hinweis.keinAssistent': '{anbieter} перекладає, але не вміє робити зведення ШІ. Для всього обери Groq, OpenAI або локальну модель.',
   'hinweis.keinAbtippen': 'Голосові повідомлення не розшифровуються. Для цього потрібна голосова служба на сервері (server-setup/dienste/stimme-einrichten.sh) або ключ Groq.',
   'hinweis.stimmeBeiGroq': 'Текстова модель працює у власній мережі, але голосові повідомлення йдуть до Groq. Із server-setup/dienste/stimme-einrichten.sh вони теж лишаться тут.',

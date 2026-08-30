@@ -1173,7 +1173,7 @@ export const da = {
   'fehler.nichtGefunden': 'Ikke fundet',
   'hinweis.lokalStumm': 'Modellen på {adresse} svarer ikke ({fehler}). Beskeder forbliver uoversatte, indtil den kører igen.',
   'hinweis.lokalOhneModell': 'Der er ikke indlæst nogen model på {adresse}. Start en dér, ellers bliver intet oversat.',
-  'hinweis.keinSchluessel': 'Ingen API-nøgle sat. Skriv GROQ_API_KEY i .env, eller skift til en lokal model.',
+  'hinweis.keinSchluessel': 'Ingen API-nøgle sat. Indtast en under “Indstillinger → Nøgler → Sprogmodeller”, eller skift til en lokal model.',
   'hinweis.keinAssistent': '{anbieter} oversætter, men kan ikke lave AI-opsummeringer. Vælg Groq, OpenAI eller en lokal model for det hele.',
   'hinweis.keinAbtippen': 'Talebeskeder bliver ikke skrevet ned. Det kræver taletjenesten på serveren (server-setup/dienste/stimme-einrichten.sh) eller en Groq-nøgle.',
   'hinweis.stimmeBeiGroq': 'Tekstmodellen kører på jeres eget net, men talebeskeder går til Groq. Med server-setup/dienste/stimme-einrichten.sh bliver også de her.',
