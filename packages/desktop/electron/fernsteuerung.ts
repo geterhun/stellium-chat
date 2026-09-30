@@ -190,6 +190,33 @@ function ziel(): BrowserWindow | null {
 let ablageZuletzt = '';
 let ablageWacht: NodeJS.Timeout | null = null;
 
+/*
+ * Merkt die Gegenstelle, dass die Leitung weg ist?
+ *
+ * Von allein nicht. Ein WebSocket, dessen Gegenseite verschwunden ist —
+ * Deckel zu, WLAN gewechselt, Weiterleitung im Router abgelaufen —, meldet
+ * kein `close`; die App stände weiter auf „offen" und zeigte ein Bild, das
+ * eingefroren ist. Der Pi fragt seinerseits alle zehn Sekunden nach
+ * (`ping`/`pong`, siehe fern-dienst.mjs) und wird die Sitzung los; hier ist
+ * die Gegenprobe dazu, damit nicht die eine Seite aufgelegt hat, während die
+ * andere noch wartet.
+ *
+ * Gemessen wird an dem, was ohnehin ständig kommt: Bilder, und alle zwei
+ * Sekunden eine Lagemeldung. Fünfundzwanzig Sekunden Stille sind darum kein
+ * ruhiger Schirm, sondern eine abgerissene Leitung.
+ */
+const LEITUNG_STILL_MS = 25_000;
+let letzteNachricht = 0;
+let leitungWacht: NodeJS.Timeout | null = null;
+
+function leitungBeobachten(): void {
+  letzteNachricht = Date.now();
+  leitungWacht ??= setInterval(() => {
+    if (lage !== 'offen') return;
+    if (Date.now() - letzteNachricht > LEITUNG_STILL_MS) schliessen('fern.fehler.leitungWeg');
+  }, 5000);
+}
+
 function melden(): void {
   /* Der Zustand geht an BEIDE: das Hauptfenster braucht ihn für den
      Verbinden-Knopf, auch wenn das Bild im eigenen Fenster läuft. */
@@ -200,6 +227,7 @@ function melden(): void {
 
 function schliessen(grund: string): void {
   if (ablageWacht) { clearInterval(ablageWacht); ablageWacht = null; }
+  if (leitungWacht) { clearInterval(leitungWacht); leitungWacht = null; }
   if (ws) { try { ws.close(); } catch { /* schon zu */ } ws = null; }
   hinaus = herein = null; paar = null; passwort = '';
   lage = grund ? 'fehler' : 'getrennt';
@@ -391,6 +419,10 @@ async function verbinden(adresse: string, pw: string, konto: string): Promise<vo
 
   buchse.addEventListener('message', (ereignis: MessageEvent) => {
     const roh = ereignis.data;
+    /* Jede Nachricht ist ein Lebenszeichen der Gegenstelle — siehe
+       `leitungBeobachten`. Vor allem `try`, damit auch eine Nachricht zählt,
+       die wir gleich verwerfen. */
+    letzteNachricht = Date.now();
     try {
       if (phase === 'gruss') {
         const gruss = JSON.parse(typeof roh === 'string' ? roh : Buffer.from(roh).toString('utf8'));
@@ -437,6 +469,7 @@ async function verbinden(adresse: string, pw: string, konto: string): Promise<vo
         if (o.art === 'offen') {
           lage = 'offen'; melden();
           ablageBeobachten();
+          leitungBeobachten();
         }
         return;
       }
@@ -481,7 +514,12 @@ async function verbinden(adresse: string, pw: string, konto: string): Promise<vo
            ein Schließen-Code vom Pi-Dienst selbst. Dieselbe Kennung, damit
            in der Ansicht nicht zwei Sätze für dieselbe Sache stehen. */
         4003: 'fern.fehler.passwort',
+        /* 4009 kommt nur noch von einem Pi mit altem Dienst — dort durfte
+           immer nur einer zusehen. Der Schlüssel bleibt genau deshalb stehen:
+           solange auf dem Pi die alte Fassung läuft, ist das die richtige
+           Auskunft. */
         4009: 'fern.fehler.besetzt',
+        4010: 'fern.fehler.zuVieleZuschauer',
         4029: 'fern.fehler.zuVieleVersuche',
         4008: 'fern.fehler.zeitUeberschritten',
       };

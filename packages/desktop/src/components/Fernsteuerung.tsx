@@ -13,7 +13,7 @@
  * dieselbe Zahl Bilder ankommt.
  */
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { AlertTriangle, ExternalLink, Keyboard, Loader2, Monitor, Power } from 'lucide-react';
+import { AlertTriangle, ExternalLink, Keyboard, Loader2, Monitor, Power, Users } from 'lucide-react';
 import { Shell } from './Panels.jsx';
 import { api } from '../net/api.js';
 import { useStore } from '../state/store.js';
@@ -67,7 +67,16 @@ export function Fernsteuerung(
      keinen Zustand, aus dem sie versehentlich in ein Protokoll geraten
      könnten. */
   const [stand, setStand] = useState<{ hinterlegt: boolean; kennung: string | null; darf: boolean } | null>(null);
-  const [info, setInfo] = useState<{ takt?: string; verworfen?: number } | null>(null);
+  /*
+   * Die Lagemeldung des Pi, alle zwei Sekunden. `zuschauer`, `steuert` und
+   * `steuerungBei` kommen von einem Pi mit neuem Dienst; bei einem älteren
+   * fehlen sie einfach, und dann bleibt alles wie vorher — deshalb überall
+   * `?` und nirgends ein Vorgabewert, der eine Behauptung wäre.
+   */
+  const [info, setInfo] = useState<{
+    takt?: string; verworfen?: number;
+    zuschauer?: number; steuert?: boolean; steuerungBei?: string | null;
+  } | null>(null);
   const [steuert, setSteuert] = useState(false);
 
   const fern = (window as any).stellium?.fern;
@@ -185,7 +194,15 @@ export function Fernsteuerung(
       if (z.lage === 'offen') dekoderRichten();
       if (z.lage !== 'offen') { setSteuert(false); setInfo(null); }
     });
-    const abInfo = fern.aufInfo((i: any) => setInfo(i));
+    const abInfo = fern.aufInfo((i: any) => {
+      setInfo(i);
+      /* Der Pi hat das letzte Wort darüber, wessen Eingaben er annimmt. Sagt
+         er, dass ein anderer steuert, geht der Knopf hier aus — sonst zeigte
+         er „Steuerung an", während nichts von dem ankommt, was man tippt.
+         Nur bei einem ausdrücklichen `false`: ein älterer Pi schickt das Feld
+         gar nicht, und aus `undefined` darf nichts folgen. */
+      if (i?.steuert === false && i?.steuerungBei != null) setSteuert(false);
+    });
     void fern.lage().then((z: { lage: Lage; fehler: string }) => {
       setLage(z.lage); setFehler(z.fehler);
       /* Auch bei der ERSTABFRAGE den Dekodierer aufsetzen, nicht nur bei
@@ -319,20 +336,56 @@ export function Fernsteuerung(
      Verbindungsaufbau. */
   const alsName = useStore.getState().self?.displayName ?? '';
 
+  /* Steuert gerade jemand anderes? Der Pi schickt dafür den Namen — und `null`
+     genau dann, wenn niemand außer einem selbst steuert. Ein leerer Text ist
+     etwas anderes als `null`: dann steuert jemand, der keinen Namen mitgegeben
+     hat (älteres App-Fenster). */
+  const fremdeSteuerung = info?.steuerungBei ?? null;
+
   const werkzeuge = lage === 'offen' ? (
     <>
       {/* „muted" statt einer eigenen Klasse: die Formatvorlage
           styles/fernsteuerung.css gehört in diesem Durchgang jemand anderem,
           und für gedämpften Beitext gibt es die Klasse längst app-weit. */}
       {alsName && <span className="muted">{t('fern.verbindetAls', { name: alsName })}</span>}
+      {/* Wie viele gerade zusehen — erst ab zwei, denn „1 sieht zu" ist keine
+          Auskunft, sondern der Normalfall. Fehlt die Zahl (älterer Pi), steht
+          hier nichts. */}
+      {(info?.zuschauer ?? 0) > 1 && (
+        <span className="muted fern__zuschauer" title={t('fern.zuschauerHilfe')}>
+          <Users size={13} /> {t('fern.zuschauer', { n: info!.zuschauer! })}
+        </span>
+      )}
       <button
         type="button"
         className={`fern__knopf ${steuert ? 'fern__knopf--an' : ''}`}
-        onClick={() => setSteuert((s) => !s)}
-        title={t('fern.steuernHilfe')}
+        /* Den Knopf sofort umlegen und dem Pi gleichzeitig Bescheid geben. Die
+           beiden Wege sind mit Absicht getrennt: bei einem Pi mit altem Dienst
+           kommt auf die Bescheid-Nachricht keine Antwort, und der Knopf muss
+           trotzdem funktionieren — dort entscheidet weiter allein die App, ob
+           sie Eingaben schickt. Widerspricht der Pi (jemand anderes steuert),
+           geht der Knopf gleich wieder aus, siehe `aufInfo` oben. */
+        onClick={() => {
+          const an = !steuert;
+          setSteuert(an);
+          fern?.steuer({ art: 'steuerung', an });
+        }}
+        /* Ausdrücklich NICHT gesperrt, solange ein anderer steuert: der Pi
+           gibt die Maus frei, wenn von dort eine Weile nichts kommt (siehe
+           STEUER_RUHE_MS in fern-dienst.mjs), und dann ist genau dieser Knopf
+           der Weg, sie zu übernehmen. Ein gesperrter Knopf hieße: warten, bis
+           der andere von selbst auf „nur zusehen" klickt — und das tut
+           niemand, der gerade nicht hinsieht. */
+        title={fremdeSteuerung !== null
+          ? t('fern.steuerungUebernehmen')
+          : t('fern.steuernHilfe')}
       >
         <Keyboard size={14} />
-        {steuert ? t('fern.steuertAn') : t('fern.steuertAus')}
+        {fremdeSteuerung !== null
+          ? (fremdeSteuerung
+            ? t('fern.steuerungBei', { name: fremdeSteuerung })
+            : t('fern.steuerungBeiUnbekannt'))
+          : steuert ? t('fern.steuertAn') : t('fern.steuertAus')}
       </button>
       {/* Nur im Hauptfenster: im Betrachter selbst wäre der Knopf sinnlos. */}
       {!eigenstaendig && (

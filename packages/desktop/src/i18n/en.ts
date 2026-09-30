@@ -1446,6 +1446,11 @@ export const en: Partial<Dictionary> = {
   'fern.steuertAn': 'Control on',
   'fern.steuertAus': 'view only',
   'fern.steuernHilfe': 'Send keyboard and mouse to the Pi',
+  'fern.zuschauer': '{n} watching',
+  'fern.zuschauerHilfe': 'This many people have the Pi’s screen open right now',
+  'fern.steuerungBei': '{name} is in control',
+  'fern.steuerungBeiUnbekannt': 'Someone else is in control',
+  'fern.steuerungUebernehmen': 'Take over control as soon as the other person lets go',
 
   /* ── Projects and review ──────────────────────────────────── */
   'projekte.title': 'Projects',
@@ -1601,6 +1606,8 @@ export const en: Partial<Dictionary> = {
   'fern.fehler.unerwarteteAntwort': 'Unexpected reply from the Pi.',
   'fern.fehler.passwort': 'Wrong password — or that isn\'t your Pi',
   'fern.fehler.besetzt': 'Someone else is already connected',
+  'fern.fehler.zuVieleZuschauer': 'Already as many people are watching as possible at once',
+  'fern.fehler.leitungWeg': 'The Pi has stopped responding',
   'fern.fehler.zuVieleVersuche': 'Too many attempts — wait a moment',
   'fern.fehler.zeitUeberschritten': 'Sign-in timed out',
   'fern.fehler.allgemein': 'Could not connect',

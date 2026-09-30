@@ -118,6 +118,17 @@
   color: var(--cyan);
 }
 
+/* Wie viele zusehen. Steht neben den Knöpfen und muss auf deren Grundlinie
+   sitzen — ein Sinnbild in einem gewöhnlichen `span` rutscht sonst nach unten,
+   weil es als Buchstabe behandelt wird. */
+.fern__zuschauer {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
 .dreht { animation: fern-dreht 1s linear infinite; }
 @keyframes fern-dreht { to { transform: rotate(360deg); } }
 

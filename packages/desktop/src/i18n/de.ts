@@ -1466,6 +1466,11 @@ export const de = {
   'fern.steuertAn': 'Steuerung an',
   'fern.steuertAus': 'nur zusehen',
   'fern.steuernHilfe': 'Tastatur und Maus an den Pi weitergeben',
+  'fern.zuschauer': '{n} sehen zu',
+  'fern.zuschauerHilfe': 'So viele haben den Bildschirm des Pi gerade offen',
+  'fern.steuerungBei': '{name} steuert',
+  'fern.steuerungBeiUnbekannt': 'Jemand anderes steuert',
+  'fern.steuerungUebernehmen': 'Steuerung übernehmen, sobald der andere sie freigibt',
 
   /* ── Projekte und Prüfen ──────────────────────────────────── */
   'projekte.title': 'Projekte',
@@ -1626,6 +1631,8 @@ export const de = {
   'fern.fehler.unerwarteteAntwort': 'Unerwartete Antwort vom Pi.',
   'fern.fehler.passwort': 'Falsches Passwort — oder am anderen Ende ist nicht dein Pi',
   'fern.fehler.besetzt': 'Es ist schon jemand verbunden',
+  'fern.fehler.zuVieleZuschauer': 'Es sehen schon so viele zu, wie gleichzeitig möglich ist',
+  'fern.fehler.leitungWeg': 'Der Pi meldet sich nicht mehr',
   'fern.fehler.zuVieleVersuche': 'Zu viele Fehlversuche — kurz warten',
   'fern.fehler.zeitUeberschritten': 'Zeitüberschreitung bei der Anmeldung',
   'fern.fehler.allgemein': 'Verbindung nicht zustande gekommen',
