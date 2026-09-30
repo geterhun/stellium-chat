@@ -49,6 +49,14 @@ jobs:
       - name: Wörterbücher inhaltlich stimmig
         run: node scripts/woerterbuecher-stimmigkeit-pruefen.mjs
 
+      # Die Fernsteuerung des Pi: mehrere Zuschauer, einer steuert, und eine
+      # Verbindung, die ohne Abmeldung abreißt, gibt ihren Platz frei. Genau
+      # das war kaputt und hat einen halben Tag gekostet — und es fiel nicht
+      # auf, weil an dem Dienst nie etwas geprüft wurde. Läuft ohne Pi und
+      # ohne Compositor gegen einen nachgemachten Abgreifer, in Sekunden.
+      - name: Mehrere sehen dem Pi zu
+        run: node scripts/fern-mehrere-pruefen.mjs
+
       - name: Server startet und antwortet
         run: |
           cd packages/server

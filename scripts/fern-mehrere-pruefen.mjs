@@ -32,8 +32,27 @@ import net from 'node:net';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import WSPaket from 'ws';
 import { kennungNeu, hallo, antwortBauen, Schatulle } from '../server-setup/fernsteuerung/dienst/anmeldung.mjs';
+
+/*
+ * `ws` braucht schon der Dienst selbst, den dieser Lauf startet — ohne das
+ * Paket ist hier nichts zu prüfen. Es steht in den devDependencies und liegt
+ * nach `npm install` da.
+ *
+ * Eingelesen wird es trotzdem von Hand, statt oben mitzuimportieren: dieser
+ * Lauf ist einer der Wächter, die `scripts/ausliefern.mjs` VOR jedem
+ * Ausliefern laufen lässt, und dort sieht man von einem gescheiterten Import
+ * nur die ersten 800 Zeichen eines Stapelabbilds. Ein Satz, der sagt, was zu
+ * tun ist, ist an dieser Stelle mehr wert als die Fundstelle.
+ */
+let WSPaket;
+try {
+  WSPaket = (await import('ws')).default;
+} catch {
+  console.error('\n\x1b[31m✗ Das Paket „ws" fehlt — der Fernsteuerungs-Dienst braucht es.\x1b[0m\n'
+    + '  Einmal  \x1b[1mnpm install\x1b[0m  im Projektverzeichnis, dann läuft das hier.\n');
+  process.exit(1);
+}
 
 const wurzel = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIENST = path.join(wurzel, 'server-setup/fernsteuerung/dienst/fern-dienst.mjs');
