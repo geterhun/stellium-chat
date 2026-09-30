@@ -2181,9 +2181,18 @@ function fernsteuerung() {
       seit: z.seit ?? null,
       konto: z.konto ?? null,
       id: z.id ?? null,
+      /* Es dürfen mehrere gleichzeitig zusehen (siehe fern-dienst.mjs). `konto`
+         nennt weiter den Ersten — das ist der, der am längsten dabei ist —,
+         und `zuschauer` sagt, wie viele es insgesamt sind. Ein älterer Dienst
+         schreibt das Feld nicht; dann steht hier 1, solange überhaupt jemand
+         verbunden ist, denn mehr konnte es dort gar nicht sein. */
+      zuschauer: Number.isFinite(z.zuschauer) ? z.zuschauer : (z.verbunden ? 1 : 0),
+      /* Wer die Maus hat. Kann auch bei niemandem liegen — dann sieht man nur
+         zu. Wie jeder Name hier eine Behauptung der Gegenstelle. */
+      steuerung: z.steuerung ?? null,
     };
   } catch {
-    return { da: false, verbunden: false, seit: null, konto: null, id: null };
+    return { da: false, verbunden: false, seit: null, konto: null, id: null, zuschauer: 0, steuerung: null };
   }
 }
 

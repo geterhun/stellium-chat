@@ -187,6 +187,74 @@ install -m 755 "$ZIEL/server-setup/stellium-selbstupdate.sh" /usr/local/bin/stel
 install -m 755 "$ZIEL/server-setup/stellium-aktualisieren.sh" /usr/local/bin/stellium-einspielen
 ok "stellium, stellium-zugang, stellium-tunnel, stellium-update"
 
+# ── Fernsteuerung auffrischen ───────────────────────────────────
+#
+# Dieselbe Lücke wie eine Ebene höher bei der Serveransicht, und sie hat Geld
+# gekostet: der Fernsteuerungs-Dienst wurde EINMAL von Hand eingerichtet, und
+# Änderungen an fern-dienst.mjs erreichten den Pi danach nie. Nichts schlug
+# dabei fehl — die alte Fassung lief einfach weiter. Wochenlang stand deshalb
+# auf jedem zweiten Rechner "Es ist schon jemand verbunden", während die
+# Behebung längst im Paket lag.
+#
+# Wo der Dienst liegt, wird nicht geraten, sondern seiner eigenen
+# systemd-Einheit entnommen — je Pi kann das ein anderer Pfad sein.
+# Ist gar keine Einheit eingerichtet, passiert hier nichts: dieser Pi hat keine
+# Fernsteuerung, und das ist in Ordnung.
+schritt "Fernsteuerung"
+FERN_DIENST="$(systemctl cat stellium-fern.service 2>/dev/null \
+  | grep -oE '/[^[:space:]]*fern-dienst\.mjs' | head -1 || true)"
+if [[ -z "${FERN_DIENST:-}" || ! -f "$FERN_DIENST" ]]; then
+  info "nicht eingerichtet — übersprungen"
+else
+  FERN_ORT="$(dirname "$FERN_DIENST")"
+  FERN_NEU=0
+  for datei in fern-dienst.mjs anmeldung.mjs passwort.mjs; do
+    FERN_QUELLE="$ZIEL/server-setup/fernsteuerung/dienst/$datei"
+    [[ -f "$FERN_QUELLE" ]] || continue
+    cmp -s "$FERN_QUELLE" "$FERN_ORT/$datei" && continue
+    install -m 755 "$FERN_QUELLE" "$FERN_ORT/$datei"
+    FERN_NEU=1
+  done
+
+  # Der Abgreifer ist ein C-Programm und muss übersetzt werden. Gebaut wird in
+  # einem Wegwerf-Verzeichnis, nicht im Quellbaum: `make` legt erzeugte Dateien
+  # neben die Quellen, und die haben in $ZIEL nichts zu suchen.
+  # Schlägt der Bau fehl, bleibt der bisherige Abgreifer stehen und arbeitet
+  # weiter — er ist der einzige Teil, den ein Update nicht ersetzen MUSS: neue
+  # Befehle, die er nicht kennt, überliest er stillschweigend.
+  FERN_HOST_BIN="$(systemctl cat stellium-fern.service 2>/dev/null \
+    | grep -oE '/[^[:space:]]*fern-host' | head -1 || true)"
+  [[ -n "${FERN_HOST_BIN:-}" ]] || FERN_HOST_BIN="/usr/local/lib/stellium/fern-host"
+  FERN_HOST_QUELLE="$ZIEL/server-setup/fernsteuerung/host"
+  if [[ -f "$FERN_HOST_BIN" && -f "$FERN_HOST_QUELLE/fern-host.c" ]] \
+     && [[ "$FERN_HOST_QUELLE/fern-host.c" -nt "$FERN_HOST_BIN" ]] \
+     && command -v wayland-scanner >/dev/null 2>&1 \
+     && pkg-config --exists wayland-client x264 libswscale libavutil xkbcommon 2>/dev/null; then
+    FERN_BAU="$(mktemp -d)"
+    cp -a "$FERN_HOST_QUELLE/." "$FERN_BAU/"
+    if make -C "$FERN_BAU" >> "$BAULOG" 2>&1 && [[ -x "$FERN_BAU/fern-host" ]]; then
+      install -m 755 "$FERN_BAU/fern-host" "$FERN_HOST_BIN"
+      FERN_NEU=1
+      ok "Abgreifer neu gebaut"
+    else
+      warn "Der Abgreifer ließ sich nicht bauen — der bisherige läuft weiter ($BAULOG)"
+    fi
+    rm -rf "$FERN_BAU"
+  fi
+
+  if (( FERN_NEU )); then
+    # Neu starten heißt: eine laufende Fernsitzung bricht ab. Das ist bei einem
+    # Update hinnehmbar — es ist eine Viertelstunde vorher angekündigt (siehe
+    # stellium-selbstupdate.sh) und der Chat-Server geht ohnehin kurz weg.
+    # Ohne Neustart läuft weiter die alte Fassung, und das ist genau der
+    # Fehler, den dieser Abschnitt behebt.
+    systemctl restart stellium-fern || warn "stellium-fern startete nicht — sudo systemctl status stellium-fern"
+    ok "aufgefrischt und neu gestartet"
+  else
+    ok "war schon aktuell"
+  fi
+fi
+
 # ── Serveransicht als Fenster ───────────────────────────────────
 # Wer vor dieser Fassung eingerichtet hat, bekam nur die Textkonsole. Das
 # Fenster kam später dazu — ohne diesen Schritt käme es nie an, weil das

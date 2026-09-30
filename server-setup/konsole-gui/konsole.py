@@ -85,6 +85,9 @@ TEXTE = {
     "de": {
         "schirm_frei": "Bildschirm  ·  niemand verbunden",
         "schirm_da": "Bildschirm  ·  {wer}  ·  verbunden seit {zeit}",
+        # Seit mehrere gleichzeitig zusehen dürfen: {wer} ist der Erste (der am
+        # längsten dabei ist), {n} sind die anderen.
+        "schirm_mehr": "Bildschirm  ·  {wer} und {n} weitere  ·  seit {zeit}",
         "schirm_aus": "Bildschirm  ·  Fernsteuerung läuft nicht",
         # Steht anstelle eines Namens, wenn die Gegenstelle keinen mitschickt
         # (ältere App-Fassung) oder keinen angegeben hat.
@@ -171,6 +174,9 @@ TEXTE = {
     "en": {
         "schirm_frei": "Screen  ·  nobody connected",
         "schirm_da": "Screen  ·  {wer}  ·  connected since {zeit}",
+        # Since several people may watch at once: {wer} is the first one (the
+        # one who has been there longest), {n} are the others.
+        "schirm_mehr": "Screen  ·  {wer} and {n} more  ·  since {zeit}",
         "schirm_aus": "Screen  ·  remote control not running",
         # Shown instead of a name when the other side doesn't send one
         # (older app version) or didn't provide one.
@@ -2882,7 +2888,14 @@ class Konsole:
             # App-Fassung), steht dort „unbekannt" statt gar nichts.
             konto = f.get("konto")
             wer = konto.strip() if isinstance(konto, str) and konto.strip() else T("schirm_unbekannt")
-            text, farbe = T("schirm_da").format(zeit=wann, wer=wer), F["warn"]
+            # Mehrere dürfen gleichzeitig zusehen. Genannt wird der Erste, dazu
+            # wie viele noch — Namen aller aufzuzählen würde die Zeile sprengen
+            # und stünde im Widerspruch zu dem, was diese Karte soll: zeigen,
+            # DASS jemand zusieht, nicht ein Verzeichnis führen.
+            wie_viele = f.get("zuschauer") or 1
+            vorlage = "schirm_mehr" if wie_viele > 1 else "schirm_da"
+            text = T(vorlage).format(zeit=wann, wer=wer, n=wie_viele - 1)
+            farbe = F["warn"]
         else:
             text, farbe = T("schirm_frei"), F["leise"]
         if text != getattr(self, "_schirm_text", None):
