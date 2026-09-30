@@ -1,7 +1,8 @@
 # Stellium Fernsteuerung
 
 Ersatz für TeamViewer auf dem Pi: Bild in Echtzeit zum Mac, Eingaben zurück,
-Zwischenablage in beide Richtungen, Anmeldung über ID und Passwort.
+Zwischenablage in beide Richtungen, Anmeldung über ID und Passwort. **Mehrere
+können gleichzeitig zusehen, einer steuert** — siehe „Mehrere Zuschauer" unten.
 
 **Stand: 20.08.2026 — vollständig, vom Mac aus durchs Internet erprobt.**
 
@@ -207,6 +208,93 @@ manager_v1` v2.
   einem Programm ankommen, ist noch nicht gezeigt** — dafür braucht es ein
   Fenster mit Fokus und jemanden, der zusieht.
 
+## Mehrere Zuschauer
+
+**Stand: 30.09.2026.** Bis dahin durfte immer nur einer zusehen, und das war
+nicht bloß eine Einschränkung, sondern ein Fehler: Dons Kollege bekam beim
+Verbinden dauernd „Es ist schon jemand verbunden" zu sehen, obwohl niemand
+zusah.
+
+Zwei Dinge steckten dahinter, und das zweite ist das eigentliche.
+
+**1. Ein Zuschauer war Absicht.** Die Begründung war richtig: ein zweiter
+Abgriff halbiert auf vier Kernen die Bildrate, und zwei Leute, die gleichzeitig
+die Maus bewegen, sind unbrauchbar. Sie begründet aber nur, dass es **einen
+Abgriff** und **eine Maus** geben darf — nicht, dass nur einer zusehen kann.
+Das Bild wird jetzt einmal erzeugt und an alle verteilt; Tastatur und Maus
+gehören dem, der als Letzter etwas eingegeben hat.
+
+**2. Niemand merkte, wenn ein Zuschauer verschwand.** Eine Verbindung, die
+nicht ordentlich auflegt — Deckel zu, WLAN gewechselt, App abgeschossen,
+Weiterleitung im Router abgelaufen —, schickt kein `close`. Ohne Nachfrage
+blieb sie dem Pi als Zuschauer erhalten, bis TCP von selbst aufgab: über eine
+Viertelstunde, und auch das nur, solange überhaupt gesendet wurde. In dieser
+Zeit war der einzige Platz besetzt, und die App sagte die Wahrheit, nur eine
+unbrauchbare. Deshalb fragt der Dienst jetzt alle zehn Sekunden per `ping`
+nach; wer zweimal nicht antwortet, ist weg. `pong` beantwortet jede
+Gegenstelle von sich aus — dafür brauchte keine App eine neue Fassung.
+
+    Zuschauer                      bis zu 4   (FERN_ZUSCHAUER)
+    Lebenszeichen                  alle 10 s  (FERN_PING_MS)
+    Geisterverbindung erkannt nach      20 s  (vorher: > 15 min)
+    Steuerung frei nach Ruhe            15 s  (FERN_STEUER_RUHE)
+
+### Was geteilt wird und was nicht
+
+| | |
+|---|---|
+| Bild | an alle. Ein Abgriff, ein Kodierer — mehrere Zuschauer kosten Leitung, keine Rechenzeit. |
+| Bitrate | eine für alle, und es gilt die **kleinste** gewünschte. Ein Bild, das für den Langsamsten zu groß ist, erreicht ihn gar nicht; dem Schnellen kostet dieselbe Entscheidung nur Schärfe. |
+| Verworfene Bilder | je Zuschauer. Der Rückstand ist eine Eigenschaft seiner Leitung, nicht des Bildes — wer nicht nachkommt, verliert einzelne Bilder, ohne dass die anderen etwas merken. |
+| Zwischenablage Pi → alle | an alle, sie ist Teil dessen, was man sieht. |
+| Zwischenablage → Pi | nur vom Steuernden. Die App schickt ihre Ablage von selbst, zweimal je Sekunde; vier Zuschauer würden die des Pi sonst im Sekundentakt gegenseitig überschreiben. |
+| Tastatur und Maus | nur vom Steuernden. |
+
+### Wer steuert
+
+Wer als Erster etwas eingibt oder in der App „Steuerung an" drückt. Kommt von
+dort 15 Sekunden nichts, darf der Nächste übernehmen — ohne diese Frist wäre
+die Maus weg, sobald einer sie angefasst hat und dann Mittag macht.
+
+Kein Verhandeln, keine Warteschlange, keine Rechte: wer das Passwort hat, ist
+gleichberechtigt. Die Frage „darf der das?" ist beim Passwort entschieden.
+
+Im Dashboard steht weiter der Name dessen, der am längsten dabei ist, dazu
+„und N weitere". In der App zeigt eine Zeile in der Werkzeugleiste, wie viele
+zusehen, und der Knopf, wer gerade steuert.
+
+### Ein Zuschauer, der dazukommt, wartete auf ein Bild
+
+Ein Zwischenbild ohne seinen Bezug ergibt nur Grün und Schlieren; die App
+wartet deshalb zu Recht auf ein vollständiges. Von allein kommt eins erst nach
+`i_keyint_max` — bei 45 Bildern vier Sekunden —, und so lange sah der
+Dazugekommene ein schwarzes Fenster und hielt es für einen Fehler. `fern-host`
+kennt dafür jetzt den Befehl `s`: nächstes Bild bitte vollständig. Ein älterer
+Abgreifer überliest ihn stillschweigend, dann bleibt es bei der Wartezeit von
+vorher.
+
+### Nachgewiesen
+
+`node scripts/fern-mehrere-pruefen.mjs` — gegen den echten Dienst, mit einem
+nachgemachten Abgreifer (ein Compositor ist auf dem Mac nicht zu haben). Kein
+Pi nötig, kein Netz, keine 30 Sekunden.
+
+    drei verbinden gleichzeitig      alle offen, genau EIN Abgriff
+    der vierte                       4010, die anderen merken nichts
+    Eingabe des Zuschauers           kommt nicht durch
+    Ablage des Zuschauers            kommt nicht durch
+    Übergabe nach Abgeben            sofort
+    Übergabe nach Ruhefrist          ohne Zutun des Vorgängers
+    stiller Zuschauer                bleibt verbunden (ping wird beantwortet)
+    Kabel gezogen                    Platz nach 2 Fristen frei
+    letzter geht                      Abgriff endet
+    nächster kommt                   Abgriff startet neu
+
+Die Zeile „stiller Zuschauer" prüft dabei die Annahme, auf der die ganze
+Erkennung beruht: dass das **eingebaute** WebSocket von Node — dasselbe, das
+electron/fernsteuerung.ts benutzt — `ping` von selbst beantwortet. Täte es das
+nicht, flöge in der Praxis jeder hinaus, der nur zusieht.
+
 ## Wie man es benutzt
 
 Auf dem Pi läuft `stellium-fern.service` dauerhaft. Sie kostet nichts, solange
@@ -224,11 +312,15 @@ Pi und könnte ein gewürfeltes Passwort gar nicht ablesen.
 
 In der Mac-App: der Bildschirm in der linken Leiste. Adresse und Passwort
 eintragen, verbinden. „Steuerung an" gibt Tastatur und Maus weiter; ohne sie
-sieht man nur zu. Die Zwischenablage läuft in beide Richtungen mit.
+sieht man nur zu. Die Zwischenablage läuft in beide Richtungen mit. Steuert
+schon jemand, steht dessen Name auf dem Knopf — ein Druck darauf übernimmt,
+sobald der andere sie freigibt (siehe „Mehrere Zuschauer").
 
 Im Dashboard des Pi steht unten in der Fernzugriffs-Karte eine Zeile
-`Bildschirm · <Konto> · verbunden seit HH:MM` — **dass** und **wer**, nie
-**was**. Der Name ist eine Behauptung der Gegenstelle, keine geprüfte
+`Bildschirm · <Konto> · verbunden seit HH:MM`, bei mehreren Zuschauern
+`Bildschirm · <Konto> und 2 weitere · seit HH:MM` — **dass** und **wer**, nie
+**was**. Genannt wird der, der am längsten dabei ist; alle Namen aufzuzählen
+würde die Zeile sprengen und aus der Karte ein Verzeichnis machen. Der Name ist eine Behauptung der Gegenstelle, keine geprüfte
 Identität: angemeldet wird sich allein über das gemeinsame Passwort, wer es
 kennt, kann jeden Namen eintragen. Er kommt erst über die verschlüsselte
 Leitung, nie im Klartext-Handschlag davor. Ältere App-Fassungen kennen das
@@ -298,6 +390,8 @@ Befehle gehen zeilenweise auf stdin:
     k <code> <0|1>       Taste (evdev-Code, KEY_A = 30)
     m <d> <l> <s> <g>    Umschalter
     a <base64>           Zwischenablage setzen
+    b <kbit>             Bitrate im Betrieb ändern
+    s                    nächstes Bild vollständig (für Dazukommende)
 
 Heraus kommen Rahmen: `[Art:1][Länge:4 LE][Inhalt]`, Art 1 = H.264,
 2 = Zwischenablage, 3 = Meldung.

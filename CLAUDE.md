@@ -81,9 +81,10 @@ node scripts/e2e-upload.mjs
 node scripts/e2e-nachruesten.mjs   # Server auf einer ALTEN Datenbank
 node scripts/schluesselwechsel-pruefen.mjs   # falsches Masterpasswort
 node scripts/notzugang-pruefen.mjs           # „3 von 5" — Notzugang
+node scripts/fern-mehrere-pruefen.mjs        # mehrere sehen dem Pi zu
 ```
 
-Die letzten drei brauchen keinen laufenden Server. `e2e-nachruesten` baut
+Die letzten vier brauchen keinen laufenden Server. `e2e-nachruesten` baut
 eine Datenbank nach dem Schema der letzten Fassung und startet den heutigen
 Server darauf. Alle anderen Läufe legen ihre Datenbank frisch an — dort bringt
 `CREATE TABLE` jede neue Spalte gleich mit, und ein Fehler in `db/migrate.ts`
@@ -93,6 +94,12 @@ fällt erst auf dem Server auf. Wer eine Spalte ergänzt, prüft damit.
 richtigen und einmal mit einem anderen Masterpasswort: der zweite Start muss
 abbrechen. Wer an `crypto/pii.ts`, `crypto/nachrichten.ts` oder der
 Schlüsselableitung dreht, prüft damit.
+
+`fern-mehrere-pruefen` startet den Fernsteuerungs-Dienst des Pi gegen einen
+nachgemachten Abgreifer und lässt mehrere Zuschauer darauf los: verteilt er das
+Bild an alle, nimmt er Eingaben nur von einem, und wird ein Platz wieder frei,
+wenn eine Verbindung abreißt, ohne sich abzumelden? Wer an
+`server-setup/fernsteuerung/dienst/` dreht, prüft damit.
 
 `notzugang-pruefen` misst zuerst die Geheimnisteilung
 (`shared/geheimnisteilung.ts`) gegen die AES-S-Box, die Rundenkonstanten und

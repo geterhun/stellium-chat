@@ -130,6 +130,17 @@ static struct {
   int   ziel_breite, ziel_hoehe;    /* Größe, in der gesendet wird */
 
   volatile bool lauf;
+  /* Naechstes Bild bitte vollstaendig — gesetzt vom Hauptfaden (Befehl 's'),
+     gelesen und zurueckgesetzt vom Kodierfaden. Ohne Schloss: das Schlimmste,
+     was ein verlorenes Rennen kostet, ist ein Schluesselbild zu viel oder
+     eines, das erst beim naechsten Bild kommt. Ein Schloss dafuer stuende im
+     Bildpfad und koennte den Abgriff bremsen — das waere der teurere Fehler.
+
+     Gebraucht wird es, sobald jemand mitten in einen laufenden Strom
+     dazukommt: bis `i_keyint_max` von allein ein vollstaendiges Bild liefert,
+     vergehen vier Sekunden, und so lange sieht der Dazugekommene schwarz
+     (die App wartet zu Recht auf ein Schluesselbild, siehe Fernsteuerung.tsx). */
+  volatile bool schluesselbild_bitte;
   struct Auftrag auftrag[AUFTRAEGE];
 
   /* Messung */
@@ -469,6 +480,15 @@ static void *kodier_faden(void *arg) {
         int64_t t1 = jetzt_ns();
 
         L.bild_ein.i_pts = L.zaehler++;
+        /* Ausdruecklich beide Faelle setzen: x264 laesst `i_type` unberuehrt,
+           ein einmal gesetztes IDR wuerde also jedes weitere Bild zum
+           Schluesselbild machen — und damit die Bitrate vervielfachen. */
+        if (L.schluesselbild_bitte) {
+          L.schluesselbild_bitte = false;
+          L.bild_ein.i_type = X264_TYPE_IDR;
+        } else {
+          L.bild_ein.i_type = X264_TYPE_AUTO;
+        }
         x264_nal_t *nals = NULL; int anzahl = 0;
         int laenge = x264_encoder_encode(L.x264, &nals, &anzahl, &L.bild_ein, &L.bild_aus);
         int64_t t2 = jetzt_ns();
@@ -624,8 +644,13 @@ static void rate_setzen(int kbit) {
 }
 
 static void befehl_ausfuehren(char *zeile) {
-  if (!L.eingabe || !*zeile) return;
+  if (!*zeile) return;
+  /* Zeiger, Tastatur und Zwischenablage brauchen die Eingabeseite. Bitrate
+     ('b') und Schluesselbild ('s') betreffen allein den Kodierer und gehen
+     auch dann, wenn keine Eingabe eingerichtet ist (--nur-lesen). Vorher
+     stand die Pruefung vor allem und verschluckte auch diese zwei. */
   char art = zeile[0];
+  if (!L.eingabe && art != 'b' && art != 's') return;
   char *rest = zeile + 1;
   switch (art) {
     case 'z': {                              /* Zeiger, 0..65535 */
@@ -673,6 +698,9 @@ static void befehl_ausfuehren(char *zeile) {
       if (kbit >= 200 && kbit <= 20000) rate_setzen(kbit);
       break;
     }
+    case 's':                                /* naechstes Bild vollstaendig */
+      L.schluesselbild_bitte = true;
+      break;
     default: break;
   }
 }
