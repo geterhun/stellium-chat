@@ -1812,7 +1812,10 @@ export async function translateChannel(
       channelId, target,
     );
     if (cached && cached.source_hash === hash && cached.provider === provider.name) {
-      const daten = JSON.parse(cached.payload) as Omit<ChannelView, 'lang' | 'provider'>;
+      /* Abgelegt wird verschlüsselt (siehe unten) — ohne entschluesseln()
+         scheiterte JSON.parse am "m1:"-Kopf, und jeder Treffer im
+         Zwischenspeicher endete als Fehler statt als Übersetzung. */
+      const daten = JSON.parse(entschluesseln(cached.payload)) as Omit<ChannelView, 'lang' | 'provider'>;
       return { lang: target, ...daten, provider: cached.provider };
     }
   }
