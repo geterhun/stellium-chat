@@ -37,10 +37,15 @@ DOMAIN="${STELLIUM_DOMAIN:-}"
 # niemandem und ist nur eine weitere Tür.
 PORT_SSH=""
 if systemctl is-active --quiet ssh 2>/dev/null || systemctl is-active --quiet sshd 2>/dev/null; then
-  PORT_SSH="$(sshd -T 2>/dev/null | awk '/^port /{print $2; exit}')"
+  # Einmal abfragen und dann aus dem Text lesen. Direkt in `awk … exit` bzw.
+  # `grep -q` geleitet, kann sshd beim Weiterschreiben an SIGPIPE sterben —
+  # mit pipefail brach dann das ganze Skript still ab (Zuweisung), oder der
+  # Schlüsselzwang galt als nicht gesetzt und der SSH-Port fiel weg.
+  SSHD_T="$(sshd -T 2>/dev/null || true)"
+  PORT_SSH="$(awk '/^port /{print $2; exit}' <<<"$SSHD_T")"
   # Nur mit Schlüsselzwang nach draußen. Ein Port mit Passwort-Anmeldung
   # wäre binnen Stunden im Visier jedes Scanners.
-  if [[ -n "$PORT_SSH" ]] && ! sshd -T 2>/dev/null | grep -qi '^passwordauthentication no'; then
+  if [[ -n "$PORT_SSH" ]] && ! grep -qi '^passwordauthentication no' <<<"$SSHD_T"; then
     PORT_SSH=""
   fi
 fi
