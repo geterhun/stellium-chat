@@ -189,8 +189,25 @@ export interface ErneuerungErgebnis {
  * Ruft niemand automatisch bei jedem API-Fehler auf: das gehört in
  * startPatreonErneuerungJob() und läuft nach der Ablauffrist, nicht nach
  * einem 401. Diese Funktion selbst weiß nichts von einem Zeitplan.
+ *
+ * Höchstens EINE Erneuerung gleichzeitig: der Hintergrundlauf und ein
+ * Diagnoselauf mit `?erneuern=1` (oder ein Doppelklick darauf) schickten
+ * sonst denselben Refresh-Token zweimal los. Patreon tauscht ihn bei der
+ * ersten Anfrage aus, die zweite scheitert mit `invalid_grant` — und deren
+ * Fehler landete NACH dem Erfolg der ersten in der Ablage, sodass die
+ * Oberfläche eine gescheiterte Erneuerung meldete, obwohl der neue Token
+ * längst gespeichert war. Ein zweiter Aufrufer bekommt deshalb das Ergebnis
+ * des laufenden.
  */
-export async function patreonErneuern(): Promise<ErneuerungErgebnis> {
+let erneuerungLaeuft: Promise<ErneuerungErgebnis> | null = null;
+
+export function patreonErneuern(): Promise<ErneuerungErgebnis> {
+  if (erneuerungLaeuft) return erneuerungLaeuft;
+  erneuerungLaeuft = erneuernEinmalig().finally(() => { erneuerungLaeuft = null; });
+  return erneuerungLaeuft;
+}
+
+async function erneuernEinmalig(): Promise<ErneuerungErgebnis> {
   const clientId = patreonClientIdLesen();
   const clientSecret = patreonClientSecretLesen();
   const refreshToken = patreonRefreshTokenLesen();
