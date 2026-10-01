@@ -1302,6 +1302,25 @@ function mailsHartLoeschen(ids: string[]): number {
       if (!adresse || uebrig.has(adresse)) continue;
       db.run('DELETE FROM mail_partner WHERE adresse_bidx = ?', blindIndex(adresse));
     }
+
+    /* Ein Gedächtnis-Vorschlag (post-lernen.ts) trägt in `herkunft` eine
+       vollständige Kopie der gesendeten Mail — Empfänger, Betreff, Text.
+       Die Beobachtung selbst (Thema/Inhalt) darf bleiben, sie ist von einem
+       Menschen beurteilt; die Kopie der Mail nicht, sonst überlebte genau
+       der Wortlaut, den diese Funktion löschen soll. `herkunft` ist
+       verschlüsselt, also bleibt nur der Durchlauf mit Entschlüsseln — die
+       Tabelle ist klein (höchstens OFFEN_MAX offene, dazu die entschiedenen). */
+    const geloeschteIds = new Set(zeilen.map((z) => z.id));
+    for (const v of db.all<{ id: string; herkunft: string }>(
+      'SELECT id, herkunft FROM mail_wissen_vorschlaege WHERE herkunft IS NOT NULL')) {
+      let herkunftMail: unknown = null;
+      try {
+        herkunftMail = (JSON.parse(entschluesseln(v.herkunft)) as { mailId?: unknown }).mailId;
+      } catch { continue; }
+      if (typeof herkunftMail === 'string' && geloeschteIds.has(herkunftMail)) {
+        db.run('UPDATE mail_wissen_vorschlaege SET herkunft = NULL WHERE id = ?', v.id);
+      }
+    }
   });
 
   /* Auch aus dem Suchindex — sonst fände eine Suche nach einem Wort aus
