@@ -344,8 +344,15 @@ async function zielBestaetigen(neu: string, bekannt: string | null): Promise<boo
  * vor `phase = 'offen'`) — sondern erst über die verschlüsselte Leitung,
  * sobald sie steht. Leer lassen ist in Ordnung: der Pi zeigt dann „unbekannt".
  */
+/* Zählt die Anläufe. Zwischen Aufruf und Verbindungsaufbau kann der
+   Bestätigungsdialog liegen; kommt in der Zeit ein zweiter Aufruf, darf der
+   erste danach nicht noch eine eigene Leitung aufmachen — sonst liefen zwei,
+   und die verwaiste überschriebe die Schlüssel der echten. */
+let anlauf = 0;
+
 async function verbinden(adresse: string, pw: string, konto: string): Promise<void> {
   schliessen('');
+  const meinAnlauf = ++anlauf;
 
   /* Vor jeder Rückfrage: sieht die Adresse überhaupt wie eine Wahlmöglichkeit
      aus? Node prüft das Schema beim Erzeugen NICHT selbst — nachgeprüft:
@@ -372,7 +379,9 @@ async function verbinden(adresse: string, pw: string, konto: string): Promise<vo
      Person per Systemdialog — nicht der Aufrufer. */
   const bekannteAdresse = vertraueteAdresse();
   if (bekannteAdresse !== adresse) {
-    if (!(await zielBestaetigen(adresse, bekannteAdresse))) {
+    const ja = await zielBestaetigen(adresse, bekannteAdresse);
+    if (meinAnlauf !== anlauf) return;
+    if (!ja) {
       lage = 'getrennt'; letzterFehler = ''; melden();
       return;
     }
@@ -406,11 +415,19 @@ async function verbinden(adresse: string, pw: string, konto: string): Promise<vo
      Die Schlüssel stehen unter `fern.fehler.*` in allen 22 Wörterbüchern
      (src/i18n/*.ts). */
   const anschlussFrist = setTimeout(() => {
-    if (lage === 'verbindet') schliessen('fern.fehler.keineAntwort');
+    if (ws === buchse && lage === 'verbindet') schliessen('fern.fehler.keineAntwort');
   }, 10_000);
+
+  /* Jedes Ereignis dieser Leitung zählt nur, solange sie die aktuelle ist.
+     ws.close() meldet `close` erst später, wenn die Gegenstelle den Abbau
+     bestätigt hat — wer in der Zwischenzeit trennt und neu verbindet, bekäme
+     sonst das späte `close` der alten Leitung auf die neue: Lage 'verbindet',
+     also schliessen('fern.fehler.allgemein'), und der neue Anlauf wäre tot. */
+  const aktuell = () => ws === buchse;
 
   buchse.addEventListener('open', () => {
     clearTimeout(anschlussFrist);
+    if (!aktuell()) return;
     lage = 'meldet an'; melden();
     /* Zuerst nur der öffentliche Schlüssel. Nichts, woraus sich das Passwort
        herstellen ließe — der Pi muss sich als Erster ausweisen. */
@@ -418,6 +435,7 @@ async function verbinden(adresse: string, pw: string, konto: string): Promise<vo
   });
 
   buchse.addEventListener('message', (ereignis: MessageEvent) => {
+    if (!aktuell()) return;
     const roh = ereignis.data;
     /* Jede Nachricht ist ein Lebenszeichen der Gegenstelle — siehe
        `leitungBeobachten`. Vor allem `try`, damit auch eine Nachricht zählt,
@@ -506,6 +524,7 @@ async function verbinden(adresse: string, pw: string, konto: string): Promise<vo
      reicht, wir brauchen nur den Code. */
   buchse.addEventListener('close', (ereignis: { code: number }) => {
     clearTimeout(anschlussFrist);
+    if (!aktuell()) return;
     const code = ereignis.code;
     if (lage === 'offen' || lage === 'meldet an' || lage === 'verbindet') {
       const gruende: Record<number, string> = {
