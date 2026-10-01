@@ -615,7 +615,6 @@ export function PostPanel({ onClose }: { onClose: () => void }) {
         .finally(() => { if (lebt) setSucheLaedt(false); });
     }, 300);
     return () => { lebt = false; clearTimeout(zeitgeber); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [suchtext, suchAktiv, aktivesFach]);
 
   /* Sprung aus dem Reiter „Post-Sichtung" (siehe jumpToPostMail() in
@@ -747,7 +746,6 @@ export function PostPanel({ onClose }: { onClose: () => void }) {
       ? (vorschlag && sendeFaecher.some((f) => f.fach === vorschlag) ? vorschlag : sendeFaecher[0].fach)
       : vorschlag;
     setAntwortFach(gueltig);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ausgewaehlteId, letzte?.fach, sendeFaecher]);
 
   /* ── Anhänge für die Antwort ───────────────────────────────────

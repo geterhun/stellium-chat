@@ -85,7 +85,6 @@ export function TaskExtractPop({ ankerRef, onClose }: {
     // fachfremdem Grund neu rendert.
     const timer = window.setTimeout(() => onCloseRef.current(), 3200);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leer]);
 
   const anzahl = ergebnis?.vorgeschlagen ?? 0;
