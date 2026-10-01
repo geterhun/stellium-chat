@@ -318,9 +318,14 @@ export async function summarizeThread(parentId: string, language: string): Promi
     fromMessageId: parentId,
     language,
     headline: data.headline?.trim() || 'Thread',
-    bullets: (data.bullets ?? []).slice(0, 8),
-    actionItems: (data.action_items ?? []).map((a) => ({ text: a.text, assigneeId: a.assignee_id ?? null })).slice(0, 10),
-    decisions: (data.decisions ?? []).slice(0, 6),
+    /* Dieselben Filter wie bei catchUp(): ein kleines Modell liefert auch mal
+       Objekte statt Zeichenketten oder ein leeres Element — ungeprüft
+       weitergereicht, scheiterte die Anzeige oder schon das .map() hier. */
+    bullets: (data.bullets ?? []).filter((b) => typeof b === 'string').slice(0, 8),
+    actionItems: (data.action_items ?? [])
+      .filter((a) => a && typeof a.text === 'string')
+      .map((a) => ({ text: a.text, assigneeId: a.assignee_id ?? null })).slice(0, 10),
+    decisions: (data.decisions ?? []).filter((d) => typeof d === 'string').slice(0, 6),
     messageCount: replies.length + 1,
     generatedAt: Date.now(),
     model: 'assistant',
