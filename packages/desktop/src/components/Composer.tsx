@@ -174,15 +174,20 @@ export function Composer({ channelId, parentId = null, placeholder, autoFocus }:
   const vertraulich = Boolean(channel?.vertraulich);
   const needsPreview = Boolean(self?.composeTargetPreview && targetLang && ai?.translation && !vertraulich);
 
+  /* Zählt jede Änderung am Text mit. Eine Vorschau, die erst nach dem
+     Absenden ankam, stand sonst unter dem leeren Feld — oder die zu einem
+     älteren Stand überschrieb die neuere. */
+  const vorschauNr = useRef(0);
   useEffect(() => {
+    const nr = ++vorschauNr.current;
     // Vier Zeichen: "okay" soll man sich ansehen können, ein "o" nicht.
-    if (!needsPreview || text.trim().length < 4) { setPreview(null); return; }
+    if (!needsPreview || text.trim().length < 4) { setPreview(null); setPreviewing(false); return; }
     const timer = window.setTimeout(() => {
       setPreviewing(true);
       useStore.getState().composePreview(text, targetLang!, channelId)
-        .then((result) => setPreview(result))
-        .catch(() => setPreview(null))
-        .finally(() => setPreviewing(false));
+        .then((result) => { if (nr === vorschauNr.current) setPreview(result); })
+        .catch(() => { if (nr === vorschauNr.current) setPreview(null); })
+        .finally(() => { if (nr === vorschauNr.current) setPreviewing(false); });
     }, 900);
     return () => clearTimeout(timer);
   }, [text, needsPreview, targetLang, channelId]);
