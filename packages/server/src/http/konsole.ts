@@ -25,7 +25,16 @@ function nurVonHier(req: FastifyRequest): boolean {
   // Hinter nginx kommt jede Anfrage von 127.0.0.1 — auch die aus dem Internet.
   // Die Adresse allein genügt deshalb nicht: kämen wir durch einen Vermittler,
   // stünde das in diesen Kopfzeilen. Sind sie da, war es nicht das Gerät selbst.
-  for (const kopf of ['x-forwarded-for', 'x-real-ip', 'forwarded', 'x-forwarded-host']) {
+  //
+  // Der Cloudflare-Tunnel führt chat.* NICHT über nginx, sondern direkt auf
+  // 127.0.0.1:8787 (server-setup/FREMDE-DIENSTE.md) — nginx blendet hier also
+  // nichts aus. X-Forwarded-For und CF-Connecting-IP lassen sich in Cloudflare
+  // abschalten („Remove visitor IP headers"); CF-Ray und CDN-Loop setzt der
+  // Rand dagegen immer. Ohne sie stünden Neustart und Protokoll offen im Netz.
+  for (const kopf of [
+    'x-forwarded-for', 'x-real-ip', 'forwarded', 'x-forwarded-host',
+    'cf-connecting-ip', 'cf-ray', 'cdn-loop',
+  ]) {
     if (req.headers[kopf]) return false;
   }
   const ip = req.ip;
