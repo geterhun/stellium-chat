@@ -1506,7 +1506,12 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
 
     case 'channel:delete': {
       if (!darf(session, 'channel.delete')) return;
-      const betroffen = store.memberIds(ev.channelId);
+      /* Einen offenen Kanal sieht jede Person in der Seitenleiste, auch ohne
+         Mitglied zu sein (store.visibleChannels) — bekäme die Meldung nur der
+         Mitgliederkreis, stünde er bei allen anderen bis zum nächsten Neuladen
+         als Leiche da. Kreis und Art vor dem Löschen, danach ist die Zeile weg. */
+      const offen = store.getChannel(ev.channelId)?.kind === 'public';
+      const betroffen = offen ? undefined : store.memberIds(ev.channelId);
       const info = channels.deleteChannel(ev.channelId);
       broadcast({ t: 'channel:removed', channelId: ev.channelId }, betroffen);
       console.log(`[kanal] #${info.name} gelöscht (${info.messages} Nachrichten) von ${userId}`);
