@@ -126,7 +126,10 @@ COMPOSITOR="$(ps -eo comm= | grep -Eix "labwc|wayfire|mutter|weston" | head -1 |
 case "$COMPOSITOR" in
   labwc|"")
     [ -z "$COMPOSITOR" ] && echo "  (gerade läuft kein Schreibtisch — die Regel wird trotzdem gelegt)"
-python3 - <<'ENDE'
+# "|| true": ohne labwc-Einstellungen beendet sich das Python mit einer
+# Meldung — unter set -e brach dann die ganze Einrichtung ab, und der
+# Hintergrund wurde nie zum Start eingetragen.
+python3 - <<'ENDE' || true
 # Trägt Regel und Bereich in die labwc-Einstellungen ein, ohne den Rest
 # anzurühren und ohne sich beim zweiten Lauf zu verdoppeln: die eigenen Zeilen
 # stehen zwischen Merkzeichen und werden vorher immer erst herausgenommen.
