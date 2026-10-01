@@ -413,6 +413,11 @@ function PasswortEditor({ eintrag, klartext, frischAngelegt, onAktualisiert, onN
 
   const geaendert = (teil: Partial<PasswortSchaufenster>) => {
     setInhalt((s) => ({ ...s, ...teil }));
+    /* Sofort auch in den Puffer, nicht erst beim nächsten Rendern: die
+       Einmalcode-Auswahl speichert gleich im selben Aufruf, und
+       speichereJetzt() läse sonst noch den alten Stand — die neue
+       Verknüpfung ginge nie hinaus. */
+    eigenerPuffer.current = { ...eigenerPuffer.current, ...teil };
     spaeterSpeichern();
   };
 
