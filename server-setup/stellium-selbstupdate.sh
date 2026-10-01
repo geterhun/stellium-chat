@@ -57,11 +57,14 @@ HINWEIS
 fi
 
 anmelden() {
-  curl -fsS --max-time 15 -X POST "$BASIS/api/auth/login" \
-    -H 'content-type: application/json' \
-    -d "$(printf '{"login":%s,"password":%s}' \
-        "$(printf '%s' "$STELLIUM_UPDATE_LOGIN" | jq -Rs .)" \
-        "$(printf '%s' "$STELLIUM_UPDATE_PASSWORT" | jq -Rs .)")" \
+  # Der Körper geht über die Standardeingabe (@-), nicht als Argument: mit -d
+  # stand das Passwort alle 30 Minuten in der Befehlszeile von curl, und die
+  # kann jedes Konto auf dem Pi in /proc mitlesen.
+  printf '{"login":%s,"password":%s}' \
+      "$(printf '%s' "$STELLIUM_UPDATE_LOGIN" | jq -Rs .)" \
+      "$(printf '%s' "$STELLIUM_UPDATE_PASSWORT" | jq -Rs .)" \
+    | curl -fsS --max-time 15 -X POST "$BASIS/api/auth/login" \
+        -H 'content-type: application/json' --data-binary @- \
     | jq -r '.token // empty'
 }
 
