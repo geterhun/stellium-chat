@@ -86,6 +86,13 @@ CONF
 ok "nur Schlüssel, kein root, Port $PORT"
 
 if sshd -t 2>/dev/null; then
+  # Den neuen Port in der Firewall freigeben, BEVOR SSH umzieht. Der
+  # Installer schaltet ufw scharf und lässt nur die Ports durch, auf denen
+  # sshd damals hörte — ohne diese Zeile wäre nach dem Neustart jede neue
+  # Verbindung ausgesperrt.
+  if command -v ufw >/dev/null 2>&1; then
+    ufw allow "$PORT/tcp" >/dev/null 2>&1 || warn "ufw: Port $PORT ließ sich nicht freigeben"
+  fi
   systemctl restart ssh 2>/dev/null || systemctl restart sshd
   ok "übernommen — die laufende Sitzung bleibt bestehen"
 else
