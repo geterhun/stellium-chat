@@ -25,7 +25,12 @@ export function ProtocolPanel({ onClose }: { onClose: () => void }) {
      Fehlschlag sofort der nächste Versuch — der Kreisel wäre wieder da, nur
      mit einem Umweg. */
   useEffect(() => {
-    if (activeChannelId && !protokoll && !laeuft && !fehler) loadProtocol(activeChannelId);
+    /* Frisch aus dem Store, nicht aus dem Rendern: wechselt der Kanal bei
+       offener Tafel, hat das Aufräumen eben alles geleert — die Werte aus dem
+       Rendern zeigten aber noch das alte Protokoll, und die Tafel bliebe leer,
+       statt für den neuen Kanal anzufragen. */
+    const s = useStore.getState();
+    if (activeChannelId && !s.protocol && !s.protocolLoading && !s.protocolFehler) loadProtocol(activeChannelId);
     return () => clearProtocol();
   }, [activeChannelId]);
 
