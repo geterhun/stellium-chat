@@ -11,6 +11,10 @@ export function Login() {
   const [error, setError] = useState<string | null>(null);
   const [serverReachable, setServerReachable] = useState<boolean | null>(null);
   const [server, setServer] = useState(serverUrl());
+  /* Die Adresse, die wirklich gilt. Geprüft wird sie, nicht das Eingabefeld:
+     vorher fragte jeder Tastendruck die ALTE Adresse ab, und nach „Setzen"
+     — das Feld ändert sich dabei nicht — prüfte niemand die neue. */
+  const [gilt, setGilt] = useState(serverUrl());
   const [showServer, setShowServer] = useState(false);
 
   const [loginId, setLoginId] = useState('');
@@ -22,7 +26,7 @@ export function Login() {
       .then(() => { if (!cancelled) setServerReachable(true); })
       .catch(() => { if (!cancelled) setServerReachable(false); });
     return () => { cancelled = true; };
-  }, [server]);
+  }, [gilt]);
 
   const submit = async () => {
     setError(null);
@@ -57,7 +61,7 @@ export function Login() {
 
         {error && <div className="auth__error">{error}</div>}
         {serverReachable === false && (
-          <div className="auth__error">{t('auth.serverUnreachable', { url: server })}</div>
+          <div className="auth__error">{t('auth.serverUnreachable', { url: gilt })}</div>
         )}
 
         <form onSubmit={(e) => { e.preventDefault(); void submit(); }}>
@@ -93,7 +97,7 @@ export function Login() {
           {showServer && (
             <div className="hstack gap-2" style={{ marginTop: 8 }}>
               <input className="input" value={server} onChange={(e) => setServer(e.target.value)} />
-              <button className="btn" onClick={() => { setServerUrl(server); setServerReachable(null); }}>{t('auth.set')}</button>
+              <button className="btn" onClick={() => { setServerUrl(server); setServerReachable(null); setGilt(serverUrl()); }}>{t('auth.set')}</button>
             </div>
           )}
         </div>
