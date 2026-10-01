@@ -69,6 +69,12 @@ export function NotzugangPanel({ onClose }: { onClose: () => void }) {
   const [meldung, setMeldung] = useState<string | null>(null);
   const [code, setCode] = useState<string | null>(null);
   const [eingabe, setEingabe] = useState('');
+  /* Je Anfrage ein eigenes Feld. Vorher teilten sich alle Beitragsfelder und
+     das Feld für die eigene Wiederherstellung EINEN Wert: wer für zwei
+     Kolleginnen zugleich einen Code hatte, tippte ihn in beide Felder, und
+     „beitragen" schickte ihn auch an die falsche Anfrage — dort hieß das
+     Ergebnis dann „verfälscht". */
+  const [beitragCodes, setBeitragCodes] = useState<Record<string, string>>({});
   const [passwort, setPasswort] = useState('');
 
   const name = (id: string) => users[id]?.displayName ?? t('common.unknown');
@@ -213,10 +219,10 @@ export function NotzugangPanel({ onClose }: { onClose: () => void }) {
   });
 
   const beitragen = (aufgabe: NotzugangAufgabe) => mitFehler(async () => {
-    const ok = await notzugang.beitragen(aufgabe.anfrageId, eingabe);
+    const ok = await notzugang.beitragen(aufgabe.anfrageId, beitragCodes[aufgabe.anfrageId] ?? '');
     setMeldung(ok ? t('notzugang.beigetragen') : null);
     if (!ok) setFehler(t('notzugang.grund.verfaelscht'));
-    setEingabe('');
+    setBeitragCodes((v) => { const n = { ...v }; delete n[aufgabe.anfrageId]; return n; });
     await laden();
   });
 
@@ -388,12 +394,16 @@ export function NotzugangPanel({ onClose }: { onClose: () => void }) {
                     </label>
                     <input
                       id={`notzugang-beitrag-${a.anfrageId}`} className="input" autoComplete="off"
-                      value={eingabe} onChange={(e) => setEingabe(e.target.value)}
+                      value={beitragCodes[a.anfrageId] ?? ''}
+                      onChange={(e) => {
+                        const wert = e.target.value;
+                        setBeitragCodes((v) => ({ ...v, [a.anfrageId]: wert }));
+                      }}
                     />
                   </div>
                   <button
                     className="btn btn--primary"
-                    disabled={laeuft || !eingabe}
+                    disabled={laeuft || !beitragCodes[a.anfrageId]}
                     onClick={() => void beitragen(a)}
                   >
                     {t('notzugang.beitragen')}
