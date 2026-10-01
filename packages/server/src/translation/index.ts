@@ -125,6 +125,10 @@ export const provider: TranslationProvider = new Proxy({} as TranslationProvider
 
 /** Nach einer Änderung in den Einstellungen neu aufbauen. */
 export async function providerNeuAufbauen(): Promise<void> {
+  /* Der alte Anbieter hat in warmUpModels() einen Takt gestartet, der seine
+     Modell-Liste nachlädt. Ohne Abschalten liefe er nach jedem Wechsel
+     weiter, für einen Anbieter, den niemand mehr fragt. */
+  if (aktiv instanceof OpenAICompatibleProvider) aktiv.registry.stop();
   aktiv = build();
   /* Wer von Hand umstellt, meint es so — eine Vertretung von vorhin hat sich
      damit erledigt. */
