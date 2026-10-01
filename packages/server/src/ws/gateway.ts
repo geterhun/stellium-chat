@@ -2,7 +2,7 @@ import type { WebSocket } from 'ws';
 import { kennungVon } from '../util/abweisung.js';
 import {
   decode, encode, isSupportedLang, normalizeLang, regionFuerZeitzone, WS_PROTOCOL_VERSION,
-  type ClientEvent, type Message, type ServerEvent, type Task, type TranslationView, type UserStatus,
+  type ClientEvent, type Message, type ServerEvent, type Task, type TranslationView, type User, type UserStatus,
   type Vorschlag, type PostMeldung, type StoredFile,
 } from '@stellium/shared';
 import { verifyToken } from '../auth.js';
@@ -116,6 +116,27 @@ function wartungMelden(session: Session, w: wartung.Wartung): void {
 /** Für Ereignisse, die außerhalb des Gateways entstehen (z. B. HTTP-Uploads). */
 export function broadcastAll(ev: ServerEvent): void {
   broadcast(ev);
+}
+
+/** Wie `ready` eine Person zeigt: getrennt heißt offline, und die Frist
+    bleibt nur sichtbar, wo sie kein „unsichtbar" verrät (siehe setStatus). */
+function nutzerSicht(u: User, betrachter: string): User {
+  const sichtbar = isOnline(u.id) ? u.status : 'offline';
+  return {
+    ...u,
+    status: sichtbar,
+    statusExpiresAt: u.id === betrachter || sichtbar !== 'offline' ? u.statusExpiresAt : null,
+  };
+}
+
+/**
+ * Eine geänderte Person an alle verteilen — jede Verbindung in der Sicht,
+ * die auch `ready` liefert. Ein rohes `store.getUser()` trüge den
+ * gespeicherten Status: die Frist eines „unsichtbar" und bei Getrennten die
+ * eigene Wahl, die `close` mit laufender Frist stehen lässt.
+ */
+export function nutzerVerteilen(u: User): void {
+  for (const uid of byUser.keys()) sendToUser(uid, { t: 'user:upsert', user: nutzerSicht(u, uid) });
 }
 
 /**
@@ -1061,7 +1082,28 @@ export function handleConnection(socket: WebSocket): void {
            läse der Leerlaufwächter einen uralten Zeitpunkt und stellte sie
            sofort auf abwesend. */
         letzteAktion.delete(session.userId);
-        setStatus(session.userId, 'offline');
+        /* Eine eigene Wahl mit laufender Frist bleibt in der Datenbank
+           stehen — nach außen gilt trotzdem „offline". Vorher wurde hier
+           stur 'offline' geschrieben, und authenticate() las beim
+           Wiederkommen genau dieses 'offline' als die eigene Wahl zurück
+           (statusHaelt() ist dann ja noch wahr): aus „bitte nicht stören"
+           wurde nach dem ersten Netzwackler „unsichtbar" — verbunden, aber
+           für alle anderen fort. Den Rundruf an die anderen formt dieselbe
+           Regel wie in setStatus(): die Frist verriete ein „unsichtbar". */
+        if (statusHaelt(session.userId)) {
+          const jetzt = Date.now();
+          db.run('UPDATE users SET last_seen_at = ? WHERE id = ?', jetzt, session.userId);
+          const u = store.getUser(session.userId);
+          if (u) {
+            broadcast({
+              t: 'presence', userId: u.id, status: 'offline',
+              statusEmoji: u.statusEmoji, statusText: u.statusText,
+              statusExpiresAt: null, lastSeenAt: u.lastSeenAt,
+            });
+          }
+        } else {
+          setStatus(session.userId, 'offline');
+        }
       }
     }
   });
@@ -1162,12 +1204,9 @@ async function authenticate(session: Session, ev: Extract<ClientEvent, { t: 'aut
   send(session, {
     t: 'ready',
     self,
-    users: store.listUsers().map((u) => ({
-      ...u,
-      status: isOnline(u.id) ? u.status : 'offline',
-      // Aus demselben Grund wie in setStatus: die Frist verriete ein „unsichtbar".
-      statusExpiresAt: u.id === userId || u.status !== 'offline' ? u.statusExpiresAt : null,
-    })),
+    // Am sichtbaren Status gemessen, nicht am gespeicherten — wer getrennt
+    // ist, behält seine eigene Wahl dort stehen (siehe `close` oben).
+    users: store.listUsers().map((u) => nutzerSicht(u, userId)),
     channels: store.visibleChannels(userId),
     states: store.channelStates(userId),
     scheduled: store.scheduledFor(userId),
@@ -2037,7 +2076,7 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
         s.autoTranslate = session.autoTranslate;
         send(s, { t: 'self:updated', self });
       }
-      broadcast({ t: 'user:upsert', user: store.getUser(userId)! });
+      nutzerVerteilen(store.getUser(userId)!);
 
       // Sprache gewechselt -> offenen Kanal in der neuen Sprache nachliefern
       if (ev.patch.language && session.openChannelId) {
@@ -4395,8 +4434,15 @@ export function verbindungen(): { clients: number; benutzer: number } {
  * einem Update stünden Leute tagelang als "online" da, die längst weg sind.
  */
 export function anwesenheitZuruecksetzen(): void {
+  /* Eine eigene Wahl mit laufender Frist bleibt stehen, aus demselben Grund
+     wie beim Schließen einer Verbindung (siehe `close` in handleConnection):
+     ein hier geschriebenes 'offline' läse authenticate() nach dem Neustart
+     als eigene Wahl zurück und machte aus „bitte nicht stören" ein
+     „unsichtbar". Nach außen gilt ohnehin, wer verbunden ist (isOnline). */
   const betroffen = database.run(
-    "UPDATE users SET status = 'offline' WHERE status <> 'offline'",
+    "UPDATE users SET status = 'offline' WHERE status <> 'offline' "
+    + 'AND (status_expires_at IS NULL OR status_expires_at <= ?)',
+    Date.now(),
   );
   void betroffen;
 }

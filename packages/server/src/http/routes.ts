@@ -50,7 +50,7 @@ import * as partnerGruppen from '../services/post-partnergruppen.js';
 import { registerPostEingang } from './posteingang.js';
 import { downloadSeite, systemErkennen } from './download/seite.js';
 
-import { broadcastAll, onlineUserIds, sitzungenBeenden, verbindungen } from '../ws/gateway.js';
+import { broadcastAll, nutzerVerteilen, onlineUserIds, sitzungenBeenden, verbindungen } from '../ws/gateway.js';
 import * as ablage from '../services/ablage.js';
 import * as avatare from '../services/avatare.js';
 import { huelleSchreiben, umschlagVonDatei } from '../crypto/dateien.js';
@@ -1447,7 +1447,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       const person = store.getUser(konto.userId);
       // Ohne diese Meldung lernten die anderen Clients das neue Konto erst
       // beim nächsten Neuladen kennen — bis dahin ließe es sich nicht erwähnen.
-      if (person) broadcastAll({ t: 'user:upsert', user: person });
+      if (person) nutzerVerteilen(person);
       return {
         credential: {
           userId: konto.userId,
@@ -1590,7 +1590,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     try {
       users.setDisabled(id, Boolean(disabled));
       const person = store.getUser(id);
-      if (person) broadcastAll({ t: 'user:upsert', user: person });
+      if (person) nutzerVerteilen(person);
       return { users: store.listManagedUsers() };
     } catch (err) {
       return weiterreichen(reply, 400, err);
@@ -1610,7 +1610,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       // Der Eintrag bleibt als "Ehemaliges Mitglied" bestehen; alle sollen das
       // sofort sehen, statt weiter einen aktiven Kontakt anzuzeigen.
       const person = store.getUser(id);
-      if (person) broadcastAll({ t: 'user:upsert', user: person });
+      if (person) nutzerVerteilen(person);
       return { users: store.listManagedUsers() };
     } catch (err) {
       return weiterreichen(reply, 400, err);
@@ -1686,7 +1686,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
         const user = store.getUser(userId);
         // Ohne diese Meldung sähen die anderen das neue Bild erst nach einem
         // Neustart der App — derselbe Weg wie bei jeder anderen Profiländerung.
-        if (user) broadcastAll({ t: 'user:upsert', user });
+        if (user) nutzerVerteilen(user);
         return { user };
       } catch (err) {
         return weiterreichen(reply, 400, err);
@@ -1707,7 +1707,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     await avatare.entfernen(bisherige);
 
     const user = store.getUser(userId);
-    if (user) broadcastAll({ t: 'user:upsert', user });
+    if (user) nutzerVerteilen(user);
     return { user };
   });
 
@@ -1729,7 +1729,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     await avatare.entfernen(bisherige);
 
     const user = store.getUser(id);
-    if (user) broadcastAll({ t: 'user:upsert', user });
+    if (user) nutzerVerteilen(user);
     return { users: store.listManagedUsers() };
   });
 
