@@ -7,6 +7,7 @@ import { useFokusfalle } from './Fokusfalle.jsx';
 import { useT, t , currentUiLanguage } from '../i18n/index.js';
 import { Avatar } from './Avatar.jsx';
 import { kanalName } from '../lib/format.js';
+import { useKlartext } from './Vertraulich.jsx';
 
 /* ── Weiterleiten ─────────────────────────────────────────────── */
 
@@ -73,6 +74,9 @@ export function ForwardDialog({ message, onClose }: { message: Message; onClose:
 export function ReminderDialog({ message, onClose }: { message: Message; onClose: () => void }) {
   const [note, setNote] = useState('');
   const [custom, setCustom] = useState('');
+  /* Erinnern geht auch in einem vertraulichen Kanal — dort steht im Zustand
+     das Chiffrat, und die Vorschau zeigte sonst einen Block Zeichen. */
+  const { text: klartext, unlesbar, laeuft } = useKlartext(message.channelId, message.text);
 
   const presets = [
     { label: t('reminder.in20'), ms: 20 * 60_000 },
@@ -89,7 +93,11 @@ export function ReminderDialog({ message, onClose }: { message: Message; onClose
 
   return (
     <Frame title={t('reminder.title')} icon={<Bell size={18} />} onClose={onClose} width={460}>
-      <div className="forward-preview">{message.text.slice(0, 220) || `🎙️ ${t('msg.voiceNote')}`}</div>
+      <div className="forward-preview">
+        {unlesbar ? t('vertraulich.nichtLesbar')
+          : laeuft ? '…'
+          : klartext.slice(0, 220) || `🎙️ ${t('msg.voiceNote')}`}
+      </div>
 
       <div className="field">
         <label className="field__label">{t('reminder.about')}</label>

@@ -558,6 +558,17 @@ export function anfrage<T>(
  */
 let protokollFrist: number | null = null;
 
+/**
+ * Die jüngste Anfrage nach Zusammenfassung bzw. Antwortvorschlägen.
+ *
+ * Eine KI-Antwort darf eine halbe Minute brauchen. Wer in der Zeit den Kanal
+ * wechselt und dort neu fragt, bekam sonst, was zuletzt ANKAM, nicht was
+ * zuletzt GEFRAGT wurde — die Vorschläge aus Kanal A standen im Schreibfeld
+ * von Kanal B, ein Klick schickte sie dorthin.
+ */
+let catchupAnfrage: string | null = null;
+let vorschlagAnfrage: string | null = null;
+
 function protokollBeenden(fehler: string | null): boolean {
   if (protokollFrist === null) return false;
   clearTimeout(protokollFrist);
@@ -2230,7 +2241,10 @@ socket.onEvent((ev: ServerEvent) => {
     case 'reminder:fire': {
       useStore.setState((s) => ({ reminders: s.reminders.filter((r) => r.id !== ev.reminder.id) }));
       const channel = store.channels[ev.reminder.channelId];
-      const preview = ev.message?.translation?.text ?? ev.message?.text ?? '';
+      const roh = ev.message?.translation?.text ?? ev.message?.text ?? '';
+      /* Aus einem vertraulichen Kanal kommt hier Chiffrat — das gehört weder
+         in die Meldung noch auf den Sperrbildschirm (wie in notifyIfNeeded). */
+      const preview = istE2EChiffrat(roh) ? '' : roh;
       store.toast({
         kind: 'info',
         title: ev.reminder.note || ts('reminder.one'),
@@ -2547,7 +2561,9 @@ function notifyIfNeeded(msg: Message): void {
   if (focused) return;
 
   const author = s.users[msg.userId];
-  const title = isDm ? (author?.displayName ?? ts('toast.newMessage')) : `#${channel?.name ?? 'Kanal'}`;
+  const title = isDm
+    ? (author?.displayName ?? ts('toast.newMessage'))
+    : (channel?.name ? `#${channel.name}` : ts('toast.newMessage'));
   const prefix = isDm ? '' : `${author?.displayName ?? ''}: `;
   /* Übersetzung bevorzugen, damit die Vorschau in der eigenen Sprache steht.
      Aus einem vertraulichen Kanal geht nichts vom Inhalt in die
