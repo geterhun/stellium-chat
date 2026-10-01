@@ -531,6 +531,17 @@ export async function lauf(frage: Modellfrage = echteFrage): Promise<LernBericht
       break;
     }
 
+    /* Während des Modellaufrufs kann die Mail endgültig gelöscht worden sein
+       (post.ts::mailsHartLoeschen()). Ein Vorschlag jetzt trüge in
+       `herkunft` eine vollständige Kopie genau des Textes, der eben gelöscht
+       wurde — also überspringen, als wäre nichts zu lernen gewesen. */
+    if (!db.get('SELECT 1 FROM mail_nachrichten WHERE id = ?', quelle.mailId)) {
+      setSetting(WASSERSTAND_SCHLUESSEL, quelle.mailId, 'system');
+      bericht.angesehen += 1;
+      zaehlen(bericht, 'geloescht');
+      continue;
+    }
+
     /* Ein echtes JSON-true, keine Zeichenkette „true": im Zweifel wird nichts
        gemerkt — dieselbe Vorsicht wie bei `antwortNoetig` in post-sichtung.ts. */
     const merken = antwort.merken === true;

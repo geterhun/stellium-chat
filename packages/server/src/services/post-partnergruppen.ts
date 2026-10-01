@@ -1015,6 +1015,17 @@ export async function lauf(): Promise<LaufBericht> {
       break;
     }
 
+    /* Während des Modellaufrufs kann die Mail endgültig gelöscht worden sein
+       (post.ts::mailsHartLoeschen(), Art. 17 DSGVO oder Frist) — und mit ihr
+       der Briefpartner, wenn sonst nichts mehr von ihm da ist. Ein Eintrag
+       jetzt legte ihn mitsamt einer aus der gelöschten Mail gelesenen
+       Begründung wieder an. */
+    if (!db.get('SELECT 1 FROM mail_nachrichten WHERE id = ?', z.id)) {
+      setSetting(WASSERSTAND_SCHLUESSEL, z.id, 'system');
+      gesichtet += 1;
+      continue;
+    }
+
     if (vorschlagEintragen(adresse, klass) === 'eingetragen') vorschlaege += 1;
     setSetting(WASSERSTAND_SCHLUESSEL, z.id, 'system');
     gesichtet += 1;
