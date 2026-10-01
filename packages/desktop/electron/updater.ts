@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawn, execFile } from 'node:child_process';
@@ -716,7 +715,13 @@ async function installiereLinux(datei: string): Promise<void> {
     throw new UpdateFehler('update.reason.notAppImage');
   }
 
-  const skript = path.join(os.tmpdir(), `stellium-update-${Date.now()}.sh`);
+  /* Ins eigene Verzeichnis, nicht nach /tmp — derselbe Grund wie beim
+     Ablageort in laden(): /tmp ist für alle Konten beschreibbar, der Name
+     hier vorhersagbar, und zwischen Schreiben und Ausführen liegen zwei
+     Sekunden. Wer die Datei vorher selbst anlegt, behält sie (writeFileSync
+     schreibt in eine vorhandene Datei, ohne Eigentümer oder Rechte zu
+     ändern) und kann den Inhalt austauschen, bevor bash ihn liest. */
+  const skript = path.join(app.getPath('userData'), `update-${Date.now()}.sh`);
   fs.writeFileSync(skript, `#!/bin/bash
 # Von Stellium erzeugt. Ersetzt das AppImage, sobald es beendet ist.
 sleep 2
@@ -724,7 +729,7 @@ cp -f ${JSON.stringify(datei)} ${JSON.stringify(appimage)}
 chmod +x ${JSON.stringify(appimage)}
 ${JSON.stringify(appimage)} &
 rm -f "$0"
-`, { mode: 0o755 });
+`, { mode: 0o700 });
 
   spawn('/bin/bash', [skript], { detached: true, stdio: 'ignore' }).unref();
 }
