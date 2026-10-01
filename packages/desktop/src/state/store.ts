@@ -557,6 +557,9 @@ export function anfrage<T>(
  * ein Fehler ohne Kennung, eine abgerissene Leitung, und gar keine Antwort.
  */
 let protokollFrist: number | null = null;
+/** Für welchen Kanal das laufende Protokoll angefragt wurde. Ein spätes
+    Protokoll für Kanal A stand sonst auf der Tafel von Kanal B. */
+let protokollKanal: string | null = null;
 
 /**
  * Die jüngste Anfrage nach Zusammenfassung bzw. Antwortvorschlägen.
@@ -1627,6 +1630,7 @@ export const useStore = create<StoreState>((set, get) => ({
       return;
     }
     set({ protocolLoading: true, protocol: null, protocolFehler: null });
+    protokollKanal = channelId;
     if (protokollFrist !== null) clearTimeout(protokollFrist);
     protokollFrist = window.setTimeout(() => protokollBeenden(ts('toast.aiTimeout')), KI_FRIST_MS);
     if (!socket.send({ t: 'ai:protocol', channelId })) {
@@ -1634,6 +1638,7 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
   clearProtocol: () => {
+    protokollKanal = null;
     if (protokollFrist !== null) { clearTimeout(protokollFrist); protokollFrist = null; }
     set({ protocol: null, protocolLoading: false, protocolFehler: null });
   },
@@ -2352,6 +2357,7 @@ socket.onEvent((ev: ServerEvent) => {
       break;
 
     case 'ai:protocol':
+      if (ev.protocol.channelId !== protokollKanal) break;
       protokollBeenden(null);
       useStore.setState({ protocol: ev.protocol, protocolLoading: false, protocolFehler: null });
       break;
