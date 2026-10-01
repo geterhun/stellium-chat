@@ -861,6 +861,9 @@ export function Composer({ channelId, parentId = null, placeholder, autoFocus }:
             onPick={(sendAt) => {
               useStore.getState().schedule({ channelId, text: text.trim(), sendAt, parentId });
               setText('');
+              // Wie nach dem Senden: sonst holte der nächste Kanalwechsel den
+              // schon eingeplanten Text als Entwurf zurück.
+              useStore.getState().saveDraft(channelId, parentId, '');
               setScheduleOpen(false);
               useStore.getState().toast({ kind: 'ok', title: t('toast.scheduled'), body: t('composer.scheduleHint') });
             }}
