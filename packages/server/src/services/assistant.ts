@@ -351,36 +351,51 @@ export async function generateReply(channelId: string, ansprache: 'privat' | 'te
      fällt vorne weg. Beim Assistenten ist das richtig: er antwortet auf das
      Letzte, nicht auf das Ganze — und anders als ein Protokoll behauptet seine
      Antwort auch nicht, den ganzen Verlauf abzubilden. */
-  const platz = verlaufsBudget({
-    fenster: ai.kontextfenster(),
-    fest: system,
-    antwort: 1600,
-  });
-  const verlauf: typeof alle = [];
-  let kosten = 0;
-  for (let i = alle.length - 1; i >= 0; i -= 1) {
-    const preis = markenSchaetzung(alle[i].content) + 4;   // Aufschlag fürs Chat-Format
-    if (kosten + preis > platz) break;
-    verlauf.unshift(alle[i]);
-    kosten += preis;
-  }
-  /* Und wenn nicht einmal die letzte Nachricht hineinpasst: lieber die eine
-     gekürzt schicken als eine Anfrage ohne Frage. */
-  if (!verlauf.length && alle.length) {
-    const letzteZeile = alle[alle.length - 1];
-    verlauf.push({ ...letzteZeile, content: `${letzteZeile.content.slice(0, Math.max(200, platz * 3))}…` });
-  }
+  /* Das gelernte Maß, nicht das behauptete (translation/fenster.ts): bedient
+     ollama das Modell kleiner, als es angibt, lief der Assistent sonst bei
+     jeder Antwort in dieselbe Absage wegen Länge. */
+  const verlaufFuer = (fenster: number): typeof alle => {
+    const platz = verlaufsBudget({ fenster, fest: system, antwort: 1600 });
+    const verlauf: typeof alle = [];
+    let kosten = 0;
+    for (let i = alle.length - 1; i >= 0; i -= 1) {
+      const preis = markenSchaetzung(alle[i].content) + 4;   // Aufschlag fürs Chat-Format
+      if (kosten + preis > platz) break;
+      verlauf.unshift(alle[i]);
+      kosten += preis;
+    }
+    /* Und wenn nicht einmal die letzte Nachricht hineinpasst: lieber die eine
+       gekürzt schicken als eine Anfrage ohne Frage. */
+    if (!verlauf.length && alle.length) {
+      const letzteZeile = alle[alle.length - 1];
+      verlauf.push({ ...letzteZeile, content: `${letzteZeile.content.slice(0, Math.max(200, platz * 3))}…` });
+    }
+    return verlauf;
+  };
 
   /* Durch `mitKennung`, und das ist hier besonders wichtig: scheitert der
      Assistent, schreibt der Gateway den Fehlertext als Nachricht in den Kanal
      („Ich konnte gerade nicht antworten: …"). Ohne diese Umsetzung stand dort
      wörtlich „groq: fetch failed" — im Chat, für alle sichtbar, auf Englisch. */
-  const antwort = await mitKennung(() => ai.chat(
-    [{ role: 'system', content: system }, ...verlauf],
-    // Niedrige Temperatur: bei Sachfragen ist Treue zum Verlauf wichtiger als
-    // sprachliche Abwechslung.
-    { temperature: 0.2, maxTokens: 1600, reasoning: 'low' },
-  ));
+  const antwort = await mitKennung(async () => {
+    let fenster = fensterFuer(ai.kennung, ai.kontextfenster());
+    for (;;) {
+      try {
+        return await ai.chat(
+          [{ role: 'system', content: system }, ...verlaufFuer(fenster)],
+          // Niedrige Temperatur: bei Sachfragen ist Treue zum Verlauf wichtiger als
+          // sprachliche Abwechslung.
+          { temperature: 0.2, maxTokens: 1600, reasoning: 'low' },
+        );
+      } catch (err) {
+        // Nur eine Absage wegen Länge wird kleiner versucht — wie in services/ai.ts.
+        if ((err as { art?: string }).art !== 'zuLang') throw err;
+        const kleiner = fensterVerkleinern(ai.kennung, fenster);
+        if (!kleiner) throw err;
+        fenster = kleiner;
+      }
+    }
+  });
 
   return antwort.trim().slice(0, 6000) || 'Dazu fällt mir gerade nichts ein.';
 }
