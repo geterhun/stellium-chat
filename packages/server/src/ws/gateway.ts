@@ -3963,7 +3963,14 @@ export function startBackgroundJobs(): () => void {
         try {
           const owner = ownerOfReminder(reminder.id);
           if (!owner) continue;
-          const message = reminder.messageId ? store.getMessage(reminder.messageId, owner) : null;
+          /* Beim Anlegen wurde der Zugang geprüft (reminder:create) — aber
+             zwischen Anlegen und Auslösen kann die Person aus dem Kanal
+             entfernt worden und die Nachricht bearbeitet worden sein. Dann
+             bekäme sie hier den neuen Text einer Nachricht, die sie nicht mehr
+             lesen darf. Die Erinnerung selbst geht trotzdem hinaus, nur ohne
+             Nachricht daran. */
+          const message = reminder.messageId && darfNachrichtLesen(owner, reminder.messageId)
+            ? store.getMessage(reminder.messageId, owner) : null;
           sendToUser(owner, { t: 'reminder:fire', reminder, message });
           if (push.sollBenachrichtigen(owner, { channelId: reminder.channelId, dringend: true })) {
             const vorschau = message?.translation?.text ?? message?.text ?? '';
