@@ -1,8 +1,8 @@
-import { languageInfo, mentionsEveryone, extractMentions } from '@stellium/shared';
+import { istE2EChiffrat, languageInfo, mentionsEveryone, extractMentions } from '@stellium/shared';
 import { db } from '../db/index.js';
 import { newId } from '../util/id.js';
 import { assistant as aiProvider } from '../translation/index.js';
-import { markenSchaetzung, verlaufsBudget } from '../translation/fenster.js';
+import { fensterFuer, fensterVerkleinern, markenSchaetzung, verlaufsBudget } from '../translation/fenster.js';
 import { mitKennung } from '../translation/fehler.js';
 import { createAccount } from './users.js';
 import { encryptField, blindIndex } from '../crypto/pii.js';
@@ -269,7 +269,12 @@ export async function generateReply(channelId: string, ansprache: 'privat' | 'te
      WHERE m.channel_id = ? AND m.deleted_at IS NULL AND m.system_kind IS NULL
      ORDER BY m.created_at DESC LIMIT ?`,
     channelId, VERLAUF_LAENGE,
-  ).reverse().map((z) => ({ ...z, text: entschluesseln(z.text) }));
+  ).reverse().map((z) => ({ ...z, text: entschluesseln(z.text) }))
+    /* Rückhalt, kein Ersatz — derselbe wie in services/ai.ts (zeile()): ist
+       ein Kanal nicht mehr vertraulich, bleibt sein alter Verlauf trotzdem
+       Chiffrat (vertraulich.ausschalten()), und der ginge sonst als Anfrage
+       an einen fremden Dienst. */
+    .filter((z) => !istE2EChiffrat(z.text));
 
   if (!zeilen.length) {
     return ansprache === 'team'
