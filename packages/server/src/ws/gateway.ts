@@ -1006,6 +1006,14 @@ export function handleConnection(socket: WebSocket): void {
     const ev = decode<ClientEvent>(raw.toString());
     if (!ev || typeof ev.t !== 'string') return;
     if (ev.t === 'auth') {
+      /* Eine Sitzung meldet sich genau einmal an. Ein zweites `auth` mit dem
+         Token eines anderen Kontos setzte sonst `session.userId` um, während
+         die Sitzung weiter in `byUser` des ersten Kontos stünde — sie bekäme
+         dessen Ereignisse weiter zugestellt, und beim Schließen räumte
+         `close` nur beim zweiten Konto auf: das erste stünde für immer als
+         verbunden da. Der eigene Client schickt `auth` ohnehin nur einmal
+         je Leitung (net/socket.ts, onopen). */
+      if (session.userId) return;
       clearTimeout(authTimer);
       // Ohne dieses catch würde ein Fehler beim Anmelden — eine hakende
       // Datenbank genügt — als unbehandelte Zurückweisung den ganzen Server
