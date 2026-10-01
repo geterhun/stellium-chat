@@ -3660,9 +3660,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
        als Bild angezeigt ergäbe es ein kaputtes Bild, und der Browser bekäme
        eine Angabe über den Inhalt, die nicht stimmt. Die App holt sich die
        Datei, entschlüsselt sie und zeigt sie selbst an. */
-    const inline = !datei.privat
-      && (/^(image|video|audio)\//.test(datei.mime) || datei.mime === 'application/pdf');
+    const inline = !datei.privat && inlineTauglich(datei.mime);
     reply.header('content-type', datei.privat ? 'application/octet-stream' : datei.mime);
+    reply.header('x-content-type-options', 'nosniff');
     reply.header('content-disposition', `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(datei.name)}`);
 
     const strom = ablage.oeffnen({
@@ -3713,9 +3713,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
        Browser bekäme eine Angabe über den Inhalt, die nicht stimmt. Die App
        holt sich die Bytes, schließt sie auf und zeigt sie selbst an. */
     const verschlossen = Boolean(row.huelle);
-    const inline = !verschlossen
-      && (/^(image|video|audio)\//.test(row.mime) || row.mime === 'application/pdf');
+    const inline = !verschlossen && inlineTauglich(row.mime);
     reply.header('content-type', verschlossen ? 'application/octet-stream' : row.mime);
+    reply.header('x-content-type-options', 'nosniff');
     reply.header('content-disposition', `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(row.name)}`);
     reply.header('cache-control', 'private, max-age=31536000, immutable');
 
@@ -3723,6 +3723,25 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     if (!strom) return fehler(reply, 404, 'fehler.dateiNichtGefunden', 'Datei nicht gefunden');
     return reply.send(strom);
   });
+}
+
+/**
+ * Darf eine hochgeladene Datei im Browser direkt angezeigt werden?
+ *
+ * Der Typ ist eine Behauptung des Hochladenden (multipart-Kopf, bei
+ * `/api/uploads/bekannt` sogar ein freies JSON-Feld). `image/svg+xml` ist
+ * ein Dokument mit Skript: inline ausgeliefert läuft es unter DIESER Adresse,
+ * also unter derselben Herkunft wie die Browser-Oberfläche — und der Link
+ * dorthin trägt das `?token=` der Person, die ihn öffnet (FilesPanel.tsx
+ * öffnet Ablage-Dateien in einem neuen Tab). Ein Kollege lädt eine SVG mit
+ * Skript hoch, jemand klickt auf „Herunterladen", und das Skript liest das
+ * fremde Token aus der eigenen Adresse. Als Anhang ausgeliefert lädt der
+ * Browser sie nur herunter; ein <img src> zeigt sie trotzdem an, weil der
+ * die Kopfzeile `content-disposition` gar nicht beachtet.
+ */
+function inlineTauglich(mime: string): boolean {
+  if (/svg|xml/i.test(mime)) return false;
+  return /^(image|video|audio)\//.test(mime) || mime === 'application/pdf';
 }
 
 /** Bildmaße aus dem Header lesen — reicht für PNG, JPEG, GIF und WebP. */
