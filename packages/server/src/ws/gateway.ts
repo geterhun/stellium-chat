@@ -1470,9 +1470,17 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
 
     case 'channel:leave': {
       const warVertraulich = vertraulich.istVertraulich(ev.channelId);
+      /* Wie bei channel:hide: die Folgen unten gelten nur, wenn wirklich
+         jemand gegangen ist. channels.leaveChannel() tut für ein
+         Nichtmitglied stillschweigend nichts — ohne diese Prüfung genügte die
+         Kennung eines fremden vertraulichen Kanals, um dessen Mitglieder
+         beliebig oft zum Schlüsselwechsel aufzufordern, und
+         kanalElementeZuruecknehmen() verriete die Kennungen der Aufgaben,
+         Termine und Ideen eines privaten Kanals, in dem man nie war. */
+      const warMitglied = store.isMember(ev.channelId, userId);
       channels.leaveChannel(ev.channelId, userId);
       sendToUser(userId, { t: 'channel:removed', channelId: ev.channelId });
-      kanalElementeZuruecknehmen(ev.channelId, [userId]);
+      if (warMitglied) kanalElementeZuruecknehmen(ev.channelId, [userId]);
       /* Ohne dies blieb `openChannelId` auf diesem Kanal stehen, und
          deliverMessage()/prefs:update() lasen ihn weiter aus (siehe die
          ausführliche Begründung bei offenenKanalVergessen() oben). */
@@ -1480,7 +1488,7 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
       /* Wer geht, nimmt den Kanalschlüssel auf seinem Gerät mit. Ohne Wechsel
          läse er alles Neue weiter mit — er müsste den Kanal dafür nicht einmal
          sehen, ein mitgeschriebenes Chiffrat genügte. */
-      if (warVertraulich) {
+      if (warVertraulich && warMitglied) {
         for (const uid of store.memberIds(ev.channelId)) {
           if (!vertraulich.kannLesen(ev.channelId, uid)) continue;
           sendToUser(uid, {
@@ -1529,7 +1537,8 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
       const warMitglied = store.isMember(ev.channelId, userId);
       channels.hideChannel(ev.channelId, userId);
       sendToUser(userId, { t: 'channel:removed', channelId: ev.channelId });
-      kanalElementeZuruecknehmen(ev.channelId, [userId]);
+      // Nur wer dabei war, hat etwas zurückzunehmen — siehe channel:leave.
+      if (warMitglied) kanalElementeZuruecknehmen(ev.channelId, [userId]);
       // Dieselbe Begründung wie bei channel:leave — Ausblenden tut hier
       // dasselbe wie Verlassen, also braucht es auch dieselbe Aufräumung.
       offenenKanalVergessen(userId, ev.channelId);
