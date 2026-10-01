@@ -1408,10 +1408,15 @@ export const useStore = create<StoreState>((set, get) => ({
       return;
     }
     const requestId = uid();
+    catchupAnfrage = requestId;
     set({ catchupLoading: true, overlay: 'catchup', catchup: null });
     void awaitReply<AiSummary>(requestId)
-      .then((summary) => set({ catchup: summary, catchupLoading: false }))
+      .then((summary) => {
+        if (catchupAnfrage !== requestId) return;
+        set({ catchup: summary, catchupLoading: false });
+      })
       .catch((err: Error) => {
+        if (catchupAnfrage !== requestId) return;
         set({ catchupLoading: false });
         get().toast({ kind: 'error', title: ts('toast.summaryFailed'), body: err.message });
       });
