@@ -1743,7 +1743,11 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
       if (!darfNachrichtAendern(userId, ev.messageId)) {
         return fail(session, 'fehler.keinNachrichtZugang', 'Zu dieser Nachricht hast du keinen Zugang.');
       }
-      const scope = ev.scope ?? 'all';
+      /* Alles außer 'me' heißt „für alle". Vorher kam ein unbekannter Wert
+         (etwa 'x') an der Rechteprüfung unten vorbei, die nur auf 'all'
+         schaut — messages.deleteMessage() behandelt aber alles außer 'me' als
+         Löschen für alle. So ließ sich ohne das Recht zum Löschen löschen. */
+      const scope = ev.scope === 'me' ? 'me' : 'all';
       const eigene = store.getMessage(ev.messageId)?.userId === userId;
       // Für sich ausblenden darf jede:r immer — das ändert nichts für andere.
       if (scope === 'all' && !darf(session, eigene ? 'message.delete_own' : 'message.delete_any')) return;
