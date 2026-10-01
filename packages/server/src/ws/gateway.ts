@@ -343,6 +343,22 @@ function broadcast(ev: ServerEvent, userIds?: Iterable<string>): void {
 }
 
 /**
+ * Einen Kanal an seinen Kreis verteilen — jeder Person in IHRER Sicht.
+ *
+ * store.getChannel(id, viewerId) legt die Übersetzung von Name und Thema in
+ * der Sprache von `viewerId` bei (und dmPeerId aus dessen Blickwinkel). Ein
+ * einziges, für die auslösende Person gebautes Objekt an alle zu rufen hieße,
+ * allen anderen deren Sprache unterzuschieben — der Client ersetzt den Kanal
+ * bei channel:upsert ganz. `undefined` heißt wie bei broadcast(): alle.
+ */
+function kanalVerteilen(channelId: string, kreis?: Iterable<string>): void {
+  for (const uid of kreis ?? [...byUser.keys()]) {
+    const ch = store.getChannel(channelId, uid);
+    if (ch) sendToUser(uid, { t: 'channel:upsert', channel: ch });
+  }
+}
+
+/**
  * Eine Meldung an den Client.
  *
  * `code` ist eine Kennung aus dem Wörterbuch der Oberfläche, `werte` füllt
@@ -2424,8 +2440,7 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
       const self = store.getSelf(userId);
       const channelId = ki.ensureTeamChannel(self?.id ?? userId);
       channels.ensureMember(channelId, userId);
-      const ch = store.getChannel(channelId, userId)!;
-      broadcast({ t: 'channel:upsert', channel: ch });
+      kanalVerteilen(channelId);
       const zustand = store.channelState(channelId, userId);
       if (zustand) send(session, { t: 'channel:state', state: zustand });
       session.openChannelId = channelId;
@@ -2442,8 +2457,8 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
          eingeschaltet da, während nie etwas passiert. */
       if (klartextNoetig(session, ev.channelId)) return;
       ki.setAiMode(ev.channelId, ev.mode);
-      const ch = store.getChannel(ev.channelId, userId);
-      if (ch) broadcast({ t: 'channel:upsert', channel: ch }, ch.kind === 'public' ? undefined : ch.memberIds);
+      const ch = store.getChannel(ev.channelId);
+      if (ch) kanalVerteilen(ch.id, ch.kind === 'public' ? undefined : ch.memberIds);
       return;
     }
 
