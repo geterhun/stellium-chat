@@ -506,6 +506,18 @@ export function PostPanel({ onClose }: { onClose: () => void }) {
   }, []);
 
   const verlaufRef = useRef<HTMLDivElement>(null);
+  /* Welche Mail gerade ausgewählt ist — für Nachladungen NACH einer Aktion
+     (Senden, Archivieren …). Wechselt jemand währenddessen die Auswahl, darf
+     der späte Verlauf der alten Mail den neuen nicht überschreiben: sonst
+     stünde unter der neu angeklickten Mail der alte Verlauf, und die nächste
+     Antwort ginge an dessen Gegenüber. */
+  const auswahlRef = useRef(ausgewaehlteId);
+  auswahlRef.current = ausgewaehlteId;
+  const verlaufNachladen = (threadId: string, fuerAuswahl: string | null) => {
+    void verlaufHolen(threadId)
+      .then((v) => { if (auswahlRef.current === fuerAuswahl) setVerlauf(v); })
+      .catch(() => { /* Verlauf bleibt beim alten Stand — kein Absturz wegen einer Nachladung */ });
+  };
 
   const faecherLaden = async () => {
     setFaecherLaedt(true); setFaecherFehler(null);
@@ -774,7 +786,10 @@ export function PostPanel({ onClose }: { onClose: () => void }) {
 
   const senden = async () => {
     const text = antwortText.trim();
-    if (!text || !letzte || !zielAdresse || !antwortFach) return;
+    // Strg+Enter führt am gesperrten Knopf vorbei: ohne diese Prüfung ginge
+    // die Antwort ohne den noch hochladenden Anhang hinaus — oder, zweimal
+    // gedrückt, während der erste Versand läuft, gleich doppelt.
+    if (!text || !letzte || !zielAdresse || !antwortFach || antwortHochladend > 0 || sendenLaedt) return;
     setSendenLaedt(true);
     try {
       await antwortSenden({
@@ -789,7 +804,7 @@ export function PostPanel({ onClose }: { onClose: () => void }) {
       setAntwortAnhaenge([]);
       useStore.getState().toast({ kind: 'ok', title: t('post.gesendet') });
       // Die eigene Antwort steht jetzt im Verlauf und ändert die Zählstände.
-      if (letzte.threadId) setVerlauf(await verlaufHolen(letzte.threadId));
+      if (letzte.threadId) verlaufNachladen(letzte.threadId, ausgewaehlteId);
       void faecherLaden();
       void listeLaden(aktivesFach);
     } catch (err) {
@@ -817,7 +832,7 @@ export function PostPanel({ onClose }: { onClose: () => void }) {
       return kopie;
     });
     if (gesendet) {
-      void verlaufHolen(entwurf.threadId).then(setVerlauf).catch(() => { /* Verlauf bleibt beim alten Stand — kein Absturz wegen einer Nachladung */ });
+      verlaufNachladen(entwurf.threadId, ausgewaehlteId);
       void faecherLaden();
       void listeLaden(aktivesFach);
     }
@@ -842,7 +857,7 @@ export function PostPanel({ onClose }: { onClose: () => void }) {
     try {
       await archivSetzenApi(n.id, n.archiviertAm === null);
       listeOderSucheAktualisieren();
-      if (n.threadId) void verlaufHolen(n.threadId).then(setVerlauf).catch(() => {});
+      if (n.threadId) verlaufNachladen(n.threadId, ausgewaehlteId);
     } catch (err) {
       useStore.getState().toast({ kind: 'error', title: t('post.aktionFehlgeschlagen'), body: (err as Error).message });
     }
@@ -853,7 +868,7 @@ export function PostPanel({ onClose }: { onClose: () => void }) {
       if (n.entferntAm === null) await entfernenSetzenApi(n.id);
       else await wiederherstellenApi(n.id);
       listeOderSucheAktualisieren();
-      if (n.threadId) void verlaufHolen(n.threadId).then(setVerlauf).catch(() => {});
+      if (n.threadId) verlaufNachladen(n.threadId, ausgewaehlteId);
     } catch (err) {
       useStore.getState().toast({ kind: 'error', title: t('post.aktionFehlgeschlagen'), body: (err as Error).message });
     }
@@ -1206,7 +1221,7 @@ export function PostPanel({ onClose }: { onClose: () => void }) {
                   <span className="muted post__antwort-hinweis">{t('post.sendenHinweis')}</span>
                   <button
                     className="btn btn--primary"
-                    disabled={!antwortText.trim() || !antwortFach || sendenLaedt}
+                    disabled={!antwortText.trim() || !antwortFach || sendenLaedt || antwortHochladend > 0}
                     onClick={() => void senden()}
                   >
                     {sendenLaedt ? <Loader2 size={14} className="spin" /> : <Send size={14} />}
@@ -1900,7 +1915,7 @@ function EntwurfKarte({ entwurf, t, faecher, onEntschieden }: {
           </button>
           <button
             className="btn btn--primary"
-            disabled={gesperrt || !betreff.trim() || !text.trim() || !fach}
+            disabled={gesperrt || hochladend > 0 || !betreff.trim() || !text.trim() || !fach}
             onClick={() => void freigeben()}
           >
             {freigebenLaedt ? <Loader2 size={14} className="spin" /> : <Send size={14} />}
