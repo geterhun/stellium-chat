@@ -53,14 +53,19 @@ function resolveSecret(): string {
   const fromEnv = str('JWT_SECRET');
   if (fromEnv && fromEnv !== 'bitte-aendern-langer-zufalls-string') return fromEnv;
   const file = path.join(dataDir, '.jwt-secret');
+  /* Eine LEERE Datei zählt wie keine. Sie entsteht, wenn der Strom zwischen
+     Anlegen und Schreiben wegbricht — auf der Speicherkarte des Pi kein
+     exotischer Fall. Vorher kam dann '' zurück, und jedes Token wurde mit
+     einem leeren HMAC-Schlüssel unterschrieben: jeder hätte sich eines für
+     jede Kontokennung selbst ausstellen können, ohne dass etwas kaputt aussah. */
   try {
-    return fs.readFileSync(file, 'utf8').trim();
-  } catch {
-    const gen = crypto.randomBytes(48).toString('base64url');
-    fs.writeFileSync(file, gen, { mode: 0o600 });
-    console.warn('[config] JWT_SECRET nicht gesetzt — generiertes Secret in data/.jwt-secret abgelegt.');
-    return gen;
-  }
+    const gelesen = fs.readFileSync(file, 'utf8').trim();
+    if (gelesen) return gelesen;
+  } catch { /* noch keine Datei — gleich unten erzeugen */ }
+  const gen = crypto.randomBytes(48).toString('base64url');
+  fs.writeFileSync(file, gen, { mode: 0o600 });
+  console.warn('[config] JWT_SECRET nicht gesetzt — generiertes Secret in data/.jwt-secret abgelegt.');
+  return gen;
 }
 
 /**
