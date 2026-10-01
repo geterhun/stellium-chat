@@ -929,7 +929,11 @@ schritt "Firewall und Einbruchsschutz"
 # gelegt —, dann räumt der reset die einzige Regel weg, über die noch jemand
 # hereinkommt. Beim nächsten Lauf wäre der Pi zu, und niemand käme mehr dran.
 # Deshalb die tatsächlichen Ports erfragen, statt 22 anzunehmen.
-SSH_PORTS="$(sshd -T 2>/dev/null | awk '/^port /{print $2}' | sort -un)"
+# Das "|| true" trägt die Rückfallebene darunter: ohne laufenden SSH-Dienst
+# (auf Raspberry Pi OS ab Werk aus) bricht `sshd -T` ab, weil /run/sshd fehlt,
+# und mit pipefail riss das die ERR-Falle mit — die Einrichtung endete hier,
+# kurz vor der Firewall, statt auf 22 zurückzufallen.
+SSH_PORTS="$(sshd -T 2>/dev/null | awk '/^port /{print $2}' | sort -un || true)"
 [[ -z "$SSH_PORTS" ]] && SSH_PORTS=22
 
 ufw --force reset >/dev/null 2>&1
