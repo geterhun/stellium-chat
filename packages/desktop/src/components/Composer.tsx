@@ -127,10 +127,21 @@ export function Composer({ channelId, parentId = null, placeholder, autoFocus }:
 
   useEffect(() => { if (autoFocus) inputRef.current?.focus(); }, [autoFocus, channelId]);
 
+  /* Wohin dieses Feld gerade schreibt — für Antworten, die erst nach einem
+     Kanalwechsel ankommen (siehe applyTone). */
+  const ziel = `${channelId}:${parentId ?? ''}`;
+  const aktuellesZiel = useRef(ziel);
+
   // Beim Kanalwechsel den gespeicherten Entwurf zurückholen.
   useEffect(() => {
+    aktuellesZiel.current = `${channelId}:${parentId ?? ''}`;
     setText(useStore.getState().draftFor(channelId, parentId));
     setPreview(null);
+    /* Anhänge gehören wie der Entwurf zu ihrem Kanal. Blieben sie stehen,
+       ginge eine im vertraulichen Kanal A verschlossene Datei mit der
+       nächsten Nachricht nach B (dort nicht lesbar) — oder eine offene aus A
+       in einen vertraulichen Kanal B, an dessen Verschlüsselung vorbei. */
+    setAttachments([]);
   }, [channelId, parentId]);
 
   /* Compose-Vorschau: so kommt die Nachricht bei den anderen an.
@@ -481,7 +492,10 @@ export function Composer({ channelId, parentId = null, placeholder, autoFocus }:
     setRewriting(true);
     try {
       const result = await useStore.getState().rewrite(text, tone);
+      // Inzwischen in einem anderen Kanal: dessen Entwurf nicht überschreiben.
+      if (aktuellesZiel.current !== ziel) return;
       setText(result);
+      useStore.getState().saveDraft(channelId, parentId, result);
     } catch (err) {
       useStore.getState().toast({ kind: 'error', title: t('toast.rewriteFailed'), body: (err as Error).message });
     } finally {
