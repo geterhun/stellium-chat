@@ -43,8 +43,12 @@ const grossAnfangsbuchstabe = (s: string) => s.charAt(0).toUpperCase() + s.slice
 const ROLLEN: { wert: MemberRole; label: string; hinweis: string; ownerOnly?: boolean; technical?: boolean }[] =
   ROLES.map((r) => ({
     wert: r.name,
-    label: t(`admin.role${grossAnfangsbuchstabe(r.name)}` as never),
-    hinweis: t(`role.${r.name}Hint` as never),
+    /* Als Getter, nicht als fester Wert: die Liste entsteht beim Laden des
+       Moduls — vor der Anmeldung, also in der Systemsprache. Wer eine andere
+       Oberflächensprache eingestellt hat, sah die Rollen sonst als einzige
+       Zeilen dieser Ansicht in der falschen Sprache. */
+    get label() { return t(`admin.role${grossAnfangsbuchstabe(r.name)}` as never); },
+    get hinweis() { return t(`role.${r.name}Hint` as never); },
     ownerOnly: r.ownerOnly,
     technical: r.technical,
   }));
@@ -389,7 +393,7 @@ export function TeamAdmin({ onClose }: { onClose: () => void }) {
                         className={`btn${person.role === r.wert ? ' btn--primary' : ''}`}
                         title={r.hinweis}
                         disabled={!darfVerwalten || busy || (Boolean(r.ownerOnly) && self?.role !== 'owner')}
-                        onClick={() => void mit(() => api.setUserRole(person.id, r.wert), `Rolle: ${r.label}`)}
+                        onClick={() => void mit(() => api.setUserRole(person.id, r.wert), `${t('team.role')}: ${r.label}`)}
                       >{r.label}</button>
                     ))}
                   </div>
@@ -695,7 +699,7 @@ function ZugangAnzeigen({ credential, onClose }: { credential: OneTimeCredential
 
   const kopieren = () => {
     void navigator.clipboard.writeText(
-      `Benutzername: ${credential.handle}\nEinmal-Passwort: ${credential.oneTimePassword}`,
+      `${t('setup.username')}: ${credential.handle}\n${t('admin.oneTimePassword')}: ${credential.oneTimePassword}`,
     );
     setKopiert(true);
     window.setTimeout(() => setKopiert(false), 2200);

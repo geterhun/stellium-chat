@@ -79,7 +79,10 @@ export function VoiceRecorder({ channelId, parentId, onDone }: Props) {
       } catch (err) {
         setError((err as Error).name === 'NotAllowedError'
           ? t('voice.noMic')
-          : `Aufnahme nicht möglich: ${(err as Error).message}`);
+          /* Kein eigener Wörterbuch-Eintrag „Aufnahme nicht möglich" bisher —
+             bis dahin der allgemeine „Nicht möglich" statt fest deutschen
+             Texts in jeder der 22 Sprachen. */
+          : `${t('team.notPossible')}: ${(err as Error).message}`);
       }
     })();
 
