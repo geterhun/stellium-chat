@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import {
   detectLanguage, extractMentions, istE2EChiffrat, mentionsEveryone, normalizeLang,
   withinDeleteWindow, withinEditWindow, type DeleteScope, type Message, type ReadReceipt,
@@ -308,7 +307,11 @@ export function discardOrphanAttachment(attachmentId: string, userId: string): v
   if (!zeile || zeile.uploader_id !== userId || zeile.message_id !== null) return;
   ablage.loeschen(attachmentId, 'attachment');
   db.run('DELETE FROM attachments WHERE id = ?', attachmentId);
-  fs.promises.rm(zeile.path, { force: true }).catch(() => {});
+  /* Nicht blind löschen: über /api/uploads/bekannt kann eine zweite Zeile auf
+     denselben Pfad zeigen — die Datei einer anderen Nachricht, womöglich
+     einer anderen Person. dateienAufraeumen() fragt vorher nach, ob noch
+     jemand sie braucht, genau wie deleteMessage(). */
+  ablage.dateienAufraeumen([zeile.path]);
 }
 
 export function editMessage(messageId: string, userId: string, text: string, mayMention = true): Message {
