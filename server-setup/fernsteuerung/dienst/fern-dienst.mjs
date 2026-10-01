@@ -224,11 +224,23 @@ function zustandSchreiben() {
 
 const fehlversuche = new Map();   /* Adresse → { anzahl, bis } */
 
+/* Erst nach so langer Ruhe wird vergessen, wie oft es schon schiefging. */
+const VERGESSEN_MS = 60 * 60_000;
+
+/*
+ * Hier stand: nach Ablauf der Wartezeit Eintrag löschen, und während der
+ * Wartezeit fünf Versuche frei. Damit fing die Zählung nach jeder Pause bei
+ * null an — die Wartezeit wuchs nie über eine Minute, und wer riet, kam auf
+ * fünf Versuche je Minute statt einer Handvoll je Stunde. Jetzt gilt die
+ * Wartezeit wirklich, und der Zähler bleibt stehen, bis eine Stunde Ruhe war
+ * oder ein Versuch gelingt.
+ */
 function darfVersuchen(adresse) {
   const e = fehlversuche.get(adresse);
   if (!e) return true;
-  if (Date.now() > e.bis) { fehlversuche.delete(adresse); return true; }
-  return e.anzahl < 5;
+  const jetzt = Date.now();
+  if (jetzt > e.bis + VERGESSEN_MS) { fehlversuche.delete(adresse); return true; }
+  return jetzt > e.bis;
 }
 
 function versuchGescheitert(adresse) {
@@ -912,6 +924,15 @@ server.on('connection', (ws, anfrage) => {
       }
 
       if (phase === 'antwort') {
+        /* Noch einmal fragen, nicht nur beim Verbinden: wer zwanzig
+           Verbindungen gleichzeitig öffnet, kommt mit allen an der Prüfung
+           oben vorbei, solange noch keine gescheitert ist — und hätte damit
+           zwanzig Versuche auf einmal. Gezählt wird, sobald der erste
+           scheitert; die übrigen prallen dann hier ab. */
+        if (!darfVersuchen(adresse)) {
+          ws.close(4029, 'zu viele Versuche');
+          return;
+        }
         const antwort = JSON.parse(String(roh));
         const urteil = antwortPruefen(handschlag, antwort);
         if (!urteil.ok) {
