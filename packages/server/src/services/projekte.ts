@@ -117,5 +117,11 @@ export function updateProjekt(id: string, patch: ProjektPatch): Projekt {
 
 /** Löscht das Projekt; seine Aufgaben bleiben und liegen danach ohne Projekt. */
 export function deleteProjekt(id: string): void {
-  db.run('DELETE FROM projekte WHERE id = ?', id);
+  /* Auf nachgerüsteten Datenbanken ist tasks.projekt_id nur TEXT ohne
+     Fremdschlüssel (db/migrate.ts) — ON DELETE SET NULL greift dort nicht,
+     und die Aufgaben behielten eine tote Projektkennung. */
+  db.transaction(() => {
+    db.run('UPDATE tasks SET projekt_id = NULL WHERE projekt_id = ?', id);
+    db.run('DELETE FROM projekte WHERE id = ?', id);
+  });
 }

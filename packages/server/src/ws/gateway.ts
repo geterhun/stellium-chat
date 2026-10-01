@@ -2582,14 +2582,19 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
          (alle Aufgaben liegen danach ohne Projekt da) — deshalb das
          Löschrecht, nicht das Anlegerecht. */
       if (!darf(session, 'task.delete')) return;
+      /* Welche Aufgaben in der Schublade lagen, steht nur VOR dem Löschen
+         fest: danach trägt ihre Zeile NULL (ON DELETE SET NULL). Vorher wurde
+         erst hinterher gesucht und `projektId === null` übersprungen — damit
+         gingen genau die betroffenen Aufgaben NICHT hinaus, dafür alle
+         unberührten aus anderen Projekten. */
+      const betroffen = tasks.listTasks({ includeFinished: true })
+        .filter((t) => t.projektId === ev.projektId)
+        .map((t) => t.id);
       projekte.deleteProjekt(ev.projektId);
       broadcast({ t: 'projekt:deleted', projektId: ev.projektId });
       /* Die Aufgaben tragen jetzt kein Projekt mehr — ohne diese Zeile stünde
          auf den Karten noch die alte Schublade, bis jemand neu lädt. */
-      for (const task of tasks.listTasks({ includeFinished: true })) {
-        if (task.projektId === null) continue;
-        broadcastTask(task);
-      }
+      for (const id of betroffen) broadcastTask(tasks.getTask(id));
       return;
     }
 
