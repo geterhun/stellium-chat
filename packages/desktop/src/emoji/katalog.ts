@@ -61,6 +61,14 @@ export function katalogLaden(sprache: string): Promise<EmojiKatalog> {
       geladen.set(echt, m.default);
       amLaufen.delete(echt);
       return m.default;
+    }, (fehler: unknown) => {
+      /* Auch den Fehlschlag austragen: sonst bekäme jeder spätere Aufruf
+         dieselbe abgelehnte Zusage zurück — ein einmal nicht ladbarer
+         Abschnitt (Netz weg, nach einem Update umbenannt) bliebe bis zum
+         Neuladen der Seite verloren, statt beim nächsten Öffnen neu
+         versucht zu werden. */
+      amLaufen.delete(echt);
+      throw fehler;
     });
     amLaufen.set(echt, laufend);
   }
@@ -82,7 +90,11 @@ export function useEmojiKatalog(sprache: string): EmojiKatalog | null {
   const [katalog, setKatalog] = useState<EmojiKatalog | null>(() => katalogWennGeladen(sprache));
   useEffect(() => {
     let lebt = true;
-    void katalogLaden(sprache).then((k) => { if (lebt) setKatalog(k); });
+    void katalogLaden(sprache)
+      .then((k) => { if (lebt) setKatalog(k); })
+      /* Ohne Namen bleibt nur die Suche nach Namen aus — die Zeichen selbst
+         stehen trotzdem da. Kein Grund für eine unbehandelte Ablehnung. */
+      .catch(() => {});
     return () => { lebt = false; };
   }, [sprache]);
   return katalog;
