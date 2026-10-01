@@ -2694,12 +2694,16 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
       if (!vorschlagSichtbar(session, ev.vorschlagId, ev.requestId)) return;
       try {
         const vorher = vorschlaege.getVorschlag(ev.vorschlagId);
+        /* Vor dem Zurücknehmen nachsehen: ein von sofortEintragen() angelegter
+           Termin ist ein Kalendereintrag, keine Idee (vorschlaege.zuruecknehmen). */
+        const warTermin = vorher?.art === 'termin' && Boolean(vorher.ergebnisId && events.getEvent(vorher.ergebnisId));
         const vorschlag = vorschlaege.zuruecknehmen(ev.vorschlagId, userId);
         /* Das Entstandene ist weg — sonst bliebe die Aufgabe auf den
            Brettern aller anderen stehen, bis jemand neu lädt. */
         if (vorher?.ergebnisId) {
           const kreis = empfaengerFuer(vorschlag.channelId);
           if (vorher.art === 'aufgabe') broadcast({ t: 'task:removed', taskId: vorher.ergebnisId }, kreis);
+          else if (warTermin) broadcast({ t: 'event:removed', eventId: vorher.ergebnisId }, kreis);
           else broadcast({ t: 'idea:removed', ideaId: vorher.ergebnisId }, kreis);
         }
         sendToUser(userId, { t: 'vorschlag:upsert', requestId: ev.requestId, vorschlag });

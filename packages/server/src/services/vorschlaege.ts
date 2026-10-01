@@ -357,6 +357,12 @@ export function zuruecknehmen(id: string, userId: string): Vorschlag {
   }
   if (v.zustand === 'angenommen' && v.ergebnisId) {
     if (v.art === 'aufgabe') tasks.deleteTask(v.ergebnisId);
+    /* Einen Termin legt nur sofortEintragen() als echten Kalendereintrag an;
+       annehmen() macht aus einem Termin-Vorschlag (noch) eine Idee. Deshalb
+       am Ergebnis selbst nachsehen, nicht nur an der Art — sonst bliebe der
+       Kalendereintrag nach dem Zurücknehmen stehen, und ein zweites
+       Annehmen legte ihn doppelt an. */
+    else if (v.art === 'termin' && events.getEvent(v.ergebnisId)) events.deleteEvent(v.ergebnisId);
     else ideas.deleteIdea(v.ergebnisId);
   }
   db.run(
