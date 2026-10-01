@@ -825,8 +825,14 @@ export async function translate(opts: TranslateOptions): Promise<TranslateOutcom
        dann sofort merken. Sonst liefe die nächste Nachricht noch einmal in
        die volle Wartezeit, obwohl längst feststeht, dass niemand da ist.
        Ein 400er oder 429er sagt dagegen nichts über die Erreichbarkeit. */
-    const status = err instanceof ProviderError ? err.status : undefined;
-    if (status === undefined || status === 408) ausfallMelden((err as Error).message);
+    /* Nach der Art, nicht nach dem fehlenden Status: auch "zu lang für das
+       Fenster" und "Antwort enthielt keine Übersetzung" tragen keinen Status
+       — dort HAT das Modell geantwortet. Als Ausfall verbucht, galt der
+       eigene Rechner danach als aus, und die Vertretung im Netz übernahm. */
+    const keineAntwort = err instanceof ProviderError
+      ? err.art === 'unerreichbar' || err.art === 'zeit'
+      : true;
+    if (keineAntwort) ausfallMelden((err as Error).message);
     // Lieber das Original zeigen als gar nichts.
     return {
       ...base, text: mitSentinels, confidence: 0, noop: true, unuebersetzt: true,
