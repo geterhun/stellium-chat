@@ -98,8 +98,11 @@ export function inAbschnitte(zeilen: string[], budget: number): string[][] {
   for (const zeile of zeilen) {
     let text = zeile;
     let preis = markenSchaetzung(text) + 1;   // +1 für den Zeilenumbruch
-    if (preis > budget) {
-      text = `${text.slice(0, budget * 3)}…`;
+    /* Drei Zeichen je Marke gelten nur für lateinische Schrift. Eine Zeile
+       auf Kyrillisch oder Chinesisch kostete nach dem ersten Schnitt noch
+       das Dreifache des Budgets — deshalb weiter halbieren, bis sie passt. */
+    for (let laenge = Math.max(1, (budget - 2) * 3); preis > budget && laenge > 0; laenge = Math.floor(laenge / 2)) {
+      text = `${zeile.slice(0, laenge)}…`;
       preis = markenSchaetzung(text) + 1;
     }
     if (kosten + preis > budget && laufend.length) {
