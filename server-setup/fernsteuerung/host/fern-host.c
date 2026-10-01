@@ -709,6 +709,8 @@ static void befehl_ausfuehren(char *zeile) {
 static void befehle_lesen(void) {
   static char rest[8192];
   static size_t belegt = 0;
+  /* Steht, solange der Rest einer weggeworfenen Zeile noch hereinkommt. */
+  static bool verwerfen = false;
   ssize_t n = read(STDIN_FILENO, rest + belegt, sizeof rest - belegt - 1);
   if (n <= 0) {
     if (n == 0) L.lauf = false;              /* Gegenseite hat aufgelegt */
@@ -721,14 +723,19 @@ static void befehle_lesen(void) {
     char *ende = strchr(anfang, '\n');
     if (!ende) break;
     *ende = 0;
-    befehl_ausfuehren(anfang);
+    if (verwerfen) verwerfen = false;        /* das Ende der zu langen Zeile */
+    else befehl_ausfuehren(anfang);
     anfang = ende + 1;
   }
   belegt = strlen(anfang);
   memmove(rest, anfang, belegt + 1);
   /* Eine Zeile, die den Puffer sprengt, ist kaputt — wegwerfen statt
-     endlos anwachsen zu lassen. */
-  if (belegt >= sizeof rest - 1) belegt = 0;
+     endlos anwachsen zu lassen. Und zwar bis zu IHREM Zeilenende: vorher
+     galt der Rest als neue Zeile, und aus einer großen Zwischenablage
+     ('a' und einige KB Base64) wurde mitten im Base64 ein Befehl — fing
+     das Bruchstück zufällig mit 'a' an, landete Zeichensalat in der Ablage
+     des Pi. */
+  if (belegt >= sizeof rest - 1) { belegt = 0; rest[0] = 0; verwerfen = true; }
 }
 
 /* Die Zwischenablage des Pi hat sich geändert — nach draußen melden. */
