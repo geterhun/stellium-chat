@@ -425,7 +425,9 @@ if [[ -f "$UMGEBUNG" ]] && grep -q STELLIUM_MASTER_PASSPHRASE "$UMGEBUNG"; then
   info "Masterpasswort besteht bereits — bleibt unverändert"
 else
   MASTER="$(head -c 32 /dev/urandom | base64 | tr -d '=+/' | head -c 43)"
-  cat > "$UMGEBUNG" <<ENV
+  # Mit umask 077 angelegt: sonst stand das Masterpasswort bis zum chmod
+  # weiter unten für jedes Konto lesbar da (0644).
+  ( umask 077; cat > "$UMGEBUNG" ) <<ENV
 # Von stellium-installieren.sh erzeugt. Nicht ins Netz stellen.
 STELLIUM_MASTER_PASSPHRASE=$MASTER
 DATA_DIR=$DATEN
@@ -764,7 +766,7 @@ else
   # ── DuckDNS: Adresse aktuell halten ─────────────────────────
   if [[ "$WAHL" == "2" ]]; then
     schritt "DuckDNS"
-    cat > /etc/stellium-duckdns <<DUCK
+    ( umask 077; cat > /etc/stellium-duckdns ) <<DUCK
 DUCK_NAME=$DUCK_NAME
 DUCK_TOKEN=$DUCK_TOKEN
 DUCK
