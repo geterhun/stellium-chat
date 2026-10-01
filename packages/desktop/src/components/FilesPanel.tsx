@@ -34,15 +34,13 @@ export function FilesPanel({ onClose }: { onClose: () => void }) {
   const t = useT();
   const files = useStore((s) => s.files);
   const usage = useStore((s) => s.storageUsage);
-  const users = useStore((s) => s.users);
-  const channels = useStore((s) => s.channels);
   const self = useStore((s) => s.self);
   /* Der Fortschritt lebt im Zustand, nicht in einem lokalen useState: schließt
      jemand diese Ansicht, während eine Datei noch hochlädt, läuft der Upload
      unbeeindruckt weiter (siehe uploadLibraryFiles in state/store.ts) — und
      wer die Ablage wieder öffnet, sieht genau da weiter, wo er stand. */
   const libraryUploads = useStore((s) => s.libraryUploads);
-  const { loadFiles, uploadLibraryFiles, dismissLibraryUpload, deleteFile, updateFile } = useStore.getState();
+  const { loadFiles, uploadLibraryFiles, dismissLibraryUpload } = useStore.getState();
 
   const [suche, setSuche] = useState('');
   const [ordner, setOrdner] = useState('');
@@ -221,123 +219,135 @@ export function FilesPanel({ onClose }: { onClose: () => void }) {
       </div>
     </Shell>
   );
+}
 
-  function FileRow({ file }: { file: StoredFile }) {
-    const wer = users[file.uploadedBy];
-    const kanal = file.channelId ? channels[file.channelId] : null;
-    const eigene = file.uploadedBy === self?.id;
-    const darf = eigene || self?.permissions['file.manage'];
-    const [holt, setHolt] = useState(false);
+/**
+ * Eine Zeile der Ablage.
+ *
+ * Steht auf Modulebene und nicht in FilesPanel: dort war sie bei jedem
+ * Zeichnen ein neuer Komponententyp, und React baute jede Zeile neu auf —
+ * bei jedem Fortschrittsschritt eines Uploads, bei jeder Statusänderung
+ * irgendeiner Person. Mit ihr ging `holt` verloren: der Knopf einer gerade
+ * entschlüsselten Datei wurde mitten im Herunterladen wieder klickbar.
+ */
+function FileRow({ file }: { file: StoredFile }) {
+  const t = useT();
+  const wer = useStore((s) => s.users[file.uploadedBy]);
+  const kanal = useStore((s) => (file.channelId ? s.channels[file.channelId] : null));
+  const self = useStore((s) => s.self);
+  const { deleteFile, updateFile } = useStore.getState();
+  const eigene = file.uploadedBy === self?.id;
+  const darf = eigene || self?.permissions['file.manage'];
+  const [holt, setHolt] = useState(false);
 
-    /**
-     * Eine private Datei herunterladen.
-     *
-     * Der Umweg über den Arbeitsspeicher ist unvermeidlich: entschlüsseln kann
-     * nur diese App, und der Browser speichert nur, was er in der Hand hat.
-     * Der echte Name kommt dabei aus dem Umschlag der Datei zurück und nicht
-     * aus der Liste — in der Liste steht, was der Server kennt.
-     */
-    const herunterladen = async (datei: StoredFile) => {
-      setHolt(true);
-      try {
-        const { kopf, url } = await dateiAnzeigen(datei.id, datei.url);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = kopf.name || datei.name;
-        /* Erst ins Dokument, dann klicken. Ein Klick auf einen Verweis, der
-           nirgends hängt, führt in manchen Browsern zu gar nichts — und dann
-           passiert beim Herunterladen scheinbar nichts. */
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-      } catch (err) {
-        useStore.getState().toast({
-          kind: 'error', title: t('files.downloadFehler'), body: (err as Error).message,
-        });
-      } finally {
-        setHolt(false);
-      }
-    };
+  /**
+   * Eine private Datei herunterladen.
+   *
+   * Der Umweg über den Arbeitsspeicher ist unvermeidlich: entschlüsseln kann
+   * nur diese App, und der Browser speichert nur, was er in der Hand hat.
+   * Der echte Name kommt dabei aus dem Umschlag der Datei zurück und nicht
+   * aus der Liste — in der Liste steht, was der Server kennt.
+   */
+  const herunterladen = async (datei: StoredFile) => {
+    setHolt(true);
+    try {
+      const { kopf, url } = await dateiAnzeigen(datei.id, datei.url);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = kopf.name || datei.name;
+      /* Erst ins Dokument, dann klicken. Ein Klick auf einen Verweis, der
+         nirgends hängt, führt in manchen Browsern zu gar nichts — und dann
+         passiert beim Herunterladen scheinbar nichts. */
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (err) {
+      useStore.getState().toast({
+        kind: 'error', title: t('files.downloadFehler'), body: (err as Error).message,
+      });
+    } finally {
+      setHolt(false);
+    }
+  };
 
-    return (
-      <motion.div
-        layout
-        className="file-row"
-        initial={{ opacity: 0, y: 5 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, height: 0 }}
-        transition={{ duration: 0.16 }}
-      >
-        <span className="file-row__icon">{symbol(file.mime)}</span>
+  return (
+    <motion.div
+      layout
+      className="file-row"
+      initial={{ opacity: 0, y: 5 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, height: 0 }}
+      transition={{ duration: 0.16 }}
+    >
+      <span className="file-row__icon">{symbol(file.mime)}</span>
 
-        <span className="file-row__main">
-          <span className="file-row__name">
-            {file.privat && <Lock size={11} style={{ verticalAlign: -1, marginRight: 4, color: 'var(--violet-soft)' }} />}
-            {file.name}
-          </span>
-          <span className="file-row__meta">
-            {groesse(file.size)}
-            {file.privat && <> · {t('files.privat')}</>}
-            {file.folder && <> · <FolderOpen size={10} /> {file.folder}</>}
-            {kanal && <> · <Hash size={10} />{kanal.name}</>}
-            {' · '}{t('files.uploadedBy', { name: wer?.displayName ?? '—' })}
-            {' · '}{relativeTime(file.createdAt)}
-          </span>
+      <span className="file-row__main">
+        <span className="file-row__name">
+          {file.privat && <Lock size={11} style={{ verticalAlign: -1, marginRight: 4, color: 'var(--violet-soft)' }} />}
+          {file.name}
         </span>
+        <span className="file-row__meta">
+          {groesse(file.size)}
+          {file.privat && <> · {t('files.privat')}</>}
+          {file.folder && <> · <FolderOpen size={10} /> {file.folder}</>}
+          {kanal && <> · <Hash size={10} />{kanal.name}</>}
+          {' · '}{t('files.uploadedBy', { name: wer?.displayName ?? '—' })}
+          {' · '}{relativeTime(file.createdAt)}
+        </span>
+      </span>
 
-        {wer && <Avatar user={wer} size={22} />}
+      {wer && <Avatar user={wer} size={22} />}
 
-        {/* Eine private Datei kann der Server nicht herausgeben — bei ihm liegt
-            Chiffrat. Ein <a href> lieferte deshalb einen unbrauchbaren Klumpen.
-            Also holt die App sie, schließt sie auf und reicht sie erst dann
-            weiter. */}
-        {file.privat ? (
-          <button
-            className="icon-btn"
-            title={t('files.download')}
-            aria-label={t('files.download')}
-            disabled={holt}
-            onClick={() => void herunterladen(file)}
-          >
-            {holt ? <Loader2 size={15} className="spin" /> : <Download size={15} />}
-          </button>
-        ) : (
-          <a
-            className="icon-btn"
-            href={dateiUrl(file.url)}
-            target="_blank"
-            rel="noreferrer"
-            title={t('files.download')}
-          >
-            <Download size={15} />
-          </a>
-        )}
+      {/* Eine private Datei kann der Server nicht herausgeben — bei ihm liegt
+          Chiffrat. Ein <a href> lieferte deshalb einen unbrauchbaren Klumpen.
+          Also holt die App sie, schließt sie auf und reicht sie erst dann
+          weiter. */}
+      {file.privat ? (
+        <button
+          className="icon-btn"
+          title={t('files.download')}
+          aria-label={t('files.download')}
+          disabled={holt}
+          onClick={() => void herunterladen(file)}
+        >
+          {holt ? <Loader2 size={15} className="spin" /> : <Download size={15} />}
+        </button>
+      ) : (
+        <a
+          className="icon-btn"
+          href={dateiUrl(file.url)}
+          target="_blank"
+          rel="noreferrer"
+          title={t('files.download')}
+        >
+          <Download size={15} />
+        </a>
+      )}
 
-        {darf && (
-          <button
-            className="icon-btn"
-            title={t('files.rename')}
-            aria-label={t('files.rename')}
-            onClick={() => {
-              const name = prompt(t('files.rename'), file.name);
-              if (name && name.trim() && name !== file.name) updateFile(file.id, { name: name.trim() });
-            }}
-          >
-            <Pencil size={15} />
-          </button>
-        )}
+      {darf && (
+        <button
+          className="icon-btn"
+          title={t('files.rename')}
+          aria-label={t('files.rename')}
+          onClick={() => {
+            const name = prompt(t('files.rename'), file.name);
+            if (name && name.trim() && name !== file.name) updateFile(file.id, { name: name.trim() });
+          }}
+        >
+          <Pencil size={15} />
+        </button>
+      )}
 
-        {darf && (
-          <button
-            className="icon-btn icon-btn--danger"
-            title={t('files.delete')}
-            aria-label={t('files.delete')}
-            onClick={() => { if (confirm(t('files.deleteConfirm'))) deleteFile(file.id); }}
-          >
-            <Trash2 size={15} />
-          </button>
-        )}
-      </motion.div>
-    );
-  }
+      {darf && (
+        <button
+          className="icon-btn icon-btn--danger"
+          title={t('files.delete')}
+          aria-label={t('files.delete')}
+          onClick={() => { if (confirm(t('files.deleteConfirm'))) deleteFile(file.id); }}
+        >
+          <Trash2 size={15} />
+        </button>
+      )}
+    </motion.div>
+  );
 }
