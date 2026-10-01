@@ -1287,8 +1287,9 @@ function minuten(w: unknown): number | null | undefined {
 
 /* ── Bremse gegen unbegrenzte KI-Aufrufe ──────────────────────────
  *
- * Betroffen: compose:preview, translate:request, ai:catchup, ai:protocol,
- * ai:ask, ai:extract-tasks — jeder dieser Wege ruft am Ende einen bezahlten
+ * Betroffen: compose:preview, translate:request, translate:roundtrip,
+ * ai:catchup, ai:protocol, ai:ask, ai:extract-tasks, ai:thread-summary,
+ * ai:smart-replies, ai:reaction-suggest, ai:rewrite — jeder dieser Wege ruft am Ende einen bezahlten
  * Anbieter (Vorgabe groq, siehe config.ts, aktiverAnbieter()). `void
  * handleEvent(...)` in handleConnection() oben wartet nicht auf die Antwort,
  * bevor es das nächste Ereignis desselben Sockets annimmt — eine Sitzung
@@ -2118,6 +2119,12 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
         return fail(session, 'fehler.keinNachrichtZugang', 'Zu dieser Nachricht hast du keinen Zugang.');
       }
       if (klartextNoetigFuerNachricht(session, ev.messageId)) return;
+      /* Der Rückweg umgeht den Übersetzungs-Cache immer (skipCache:true in
+         roundTrip()) — jede Anfrage ist also ein echter Modellaufruf, genau
+         wie translate:request mit force. Ohne Bremse war das der Weg, auf dem
+         sich beide Grenzen oben unbegrenzt umgehen ließen. */
+      if (!kiForceZugang(session)) return;
+      if (!kiZugang(session)) return;
       const result = await roundTrip(ev.messageId, ev.targetLang);
       if (!result) return fail(session, 'fehler.keineUebersetzungDa', 'Für diese Nachricht liegt keine Übersetzung vor');
       send(session, { t: 'roundtrip', messageId: ev.messageId, targetLang: ev.targetLang, ...result });
@@ -2181,6 +2188,7 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
         return fail(session, 'fehler.nachrichtNichtGefunden', 'Nachricht nicht gefunden', ev.requestId);
       }
       if (klartextNoetigFuerNachricht(session, ev.messageId)) return;
+      if (!kiZugang(session, ev.requestId)) return;
       const summary = await ai.summarizeThread(ev.messageId, session.language);
       send(session, { t: 'ai:thread-summary', requestId: ev.requestId, messageId: ev.messageId, summary });
       return;
@@ -2191,6 +2199,7 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
       // Vorschläge entstehen aus dem Verlauf — also nur, wo man mitliest.
       if (!kanalZugang(session, ev.channelId, ev.requestId)) return;
       if (klartextNoetig(session, ev.channelId)) return;
+      if (!kiZugang(session, ev.requestId)) return;
       const self = store.getSelf(userId)!;
       const replies = await ai.smartReplies({
         channelId: ev.channelId, parentId: ev.parentId ?? null,
@@ -2206,6 +2215,7 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
         return fail(session, 'fehler.nachrichtNichtGefunden', 'Nachricht nicht gefunden', ev.requestId);
       }
       if (klartextNoetigFuerNachricht(session, ev.messageId)) return;
+      if (!kiZugang(session, ev.requestId)) return;
       const emojis = await emojiVorschlaege.reactionSuggest(ev.messageId, session.language);
       send(session, { t: 'ai:reaction-suggest', requestId: ev.requestId, messageId: ev.messageId, emojis });
       return;
@@ -2218,6 +2228,7 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
          vertraulich ist. */
       if (ev.channelId && !kanalZugang(session, ev.channelId, ev.requestId)) return;
       if (klartextNoetig(session, ev.channelId)) return;
+      if (!kiZugang(session, ev.requestId)) return;
       const text = await ai.rewrite({ text: ev.text, tone: ev.tone, targetLang: ev.targetLang ?? null });
       send(session, { t: 'ai:rewrite', requestId: ev.requestId, text });
       return;
