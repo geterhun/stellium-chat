@@ -347,9 +347,22 @@ function PasswortEditor({ eintrag, klartext, frischAngelegt, onAktualisiert, onN
   const geheimRef = useRef(geheim);
   geheimRef.current = geheim;
   const umstellenLaeuft = useRef(false);
+  /* Gesetzt von „Übernehmen" im Konflikthinweis: der nächste frisch geladene
+     Klartext ersetzt das Formular. Ohne das blieb der eigene, überholte Stand
+     stehen, und das nächste automatische Speichern schrieb ihn mit der neuen
+     Fassungsnummer still über den fremden — genau das Gegenteil von
+     „Übernehmen". */
+  const fremdenStandUebernehmen = useRef(false);
 
   useEffect(() => {
-    if (befuellt.current || !klartext) return;
+    if (!klartext) return;
+    if (fremdenStandUebernehmen.current) {
+      fremdenStandUebernehmen.current = false;
+      befuellt.current = true;
+      setInhalt(klartext);
+      return;
+    }
+    if (befuellt.current) return;
     befuellt.current = true;
     setInhalt(klartext);
   }, [klartext]);
@@ -626,7 +639,21 @@ function PasswortEditor({ eintrag, klartext, frischAngelegt, onAktualisiert, onN
             <div style={{ fontWeight: 700, marginBottom: 4 }}>{t('passwort.konfliktTitel')}</div>
             <div style={{ fontSize: 12.5, opacity: 0.9 }}>{t('passwort.konfliktText')}</div>
             <div className="hstack gap-2" style={{ marginTop: 8, flexWrap: 'wrap' }}>
-              <button className="btn" onClick={() => { setKonflikt(false); void onNeuLaden(); }}>
+              <button
+                className="btn"
+                onClick={() => {
+                  if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+                  /* Auch das Passwort zurück auf „nicht geholt": ein hier
+                     aufgedeckter, alter Wert schriebe sonst beim nächsten
+                     Speichern ein inzwischen geändertes Passwort weg. */
+                  setGeheim(null);
+                  geheimRef.current = null;
+                  setSichtbar(false);
+                  fremdenStandUebernehmen.current = true;
+                  setKonflikt(false);
+                  void onNeuLaden();
+                }}
+              >
                 {t('passwort.konfliktUebernehmen')}
               </button>
               <button className="btn btn--danger" onClick={() => speichereJetzt(true)}>
