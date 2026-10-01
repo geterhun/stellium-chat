@@ -1954,13 +1954,24 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
        * den alles von selbst zurückfällt. Ihn festzuhalten hieße, den
        * Leerlaufwächter für acht Stunden abzuschalten.
        */
+      /* Dieselbe Strenge wie bei prefs:update (EINSTELLUNGEN oben): alles
+         hier geht per `presence` an jede offene Verbindung im Haus. Ungeprüft
+         ließ sich ein Status namens „lila" setzen oder ein Statustext mit
+         Megabytes, den dann jede Sitzung zugestellt bekam. Die Grenze von 80
+         Zeichen ist die der Oberfläche (StatusMenu, MELDUNG_MAX). */
+      const status = ausListe(ev.status, ['online', 'away', 'dnd', 'offline']) as UserStatus | undefined;
+      if (!status) return;
+      const emoji = ev.statusEmoji === undefined ? undefined : text(ev.statusEmoji, 64);
+      const statusText = ev.statusText === undefined ? undefined : text(ev.statusText, 80);
+      const gewuenschteFrist = typeof ev.statusExpiresAt === 'number' && Number.isFinite(ev.statusExpiresAt)
+        ? ev.statusExpiresAt : undefined;
       const automatisch = ev.statusExpiresAt === null;
       if (automatisch && statusHaelt(userId)) return;
       const frist = automatisch
         ? null
-        : ev.statusExpiresAt ?? (ev.status === 'online' ? null : Date.now() + MANUELL_HAELT_MS);
+        : gewuenschteFrist ?? (status === 'online' ? null : Date.now() + MANUELL_HAELT_MS);
       if (!automatisch) letzteAktion.set(userId, Date.now());
-      setStatus(userId, ev.status, ev.statusEmoji, ev.statusText, frist);
+      setStatus(userId, status, emoji, statusText, frist);
       return;
     }
 
