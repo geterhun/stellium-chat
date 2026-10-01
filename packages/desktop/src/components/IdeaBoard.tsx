@@ -29,7 +29,6 @@ export function IdeaBoard({ onClose }: { onClose: () => void }) {
   );
 
   const ideas = useStore((s) => s.ideas);
-  const users = useStore((s) => s.users);
   const self = useStore((s) => s.self);
   const { loadIdeas, ideeGeprueft, deleteIdea } = useStore.getState();
 
@@ -165,77 +164,84 @@ export function IdeaBoard({ onClose }: { onClose: () => void }) {
       </AnimatePresence>
     </Shell>
   );
+}
 
-  function IdeaRow({ idea, onOpen }: { idea: Idea; onOpen: () => void }) {
-    const wer = users[idea.createdBy];
-    return (
-      <motion.div
-        layout
-        className="idea-row"
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.98 }}
-        transition={{ duration: 0.17 }}
-      >
-        <VoteBox idea={idea} />
+/* IdeaRow und VoteBox auf Modulebene, nicht in IdeaBoard: dort waren sie
+   bei jedem Zeichnen neue Komponententypen, und jede Statusänderung
+   irgendeiner Person baute alle Zeilen neu auf — sichtbar als Flackern der
+   Einblendung über die ganze Liste. */
+function IdeaRow({ idea, onOpen }: { idea: Idea; onOpen: () => void }) {
+  const t = useT();
+  const wer = useStore((s) => s.users[idea.createdBy]);
+  return (
+    <motion.div
+      layout
+      className="idea-row"
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.98 }}
+      transition={{ duration: 0.17 }}
+    >
+      <VoteBox idea={idea} />
 
-        <button className="idea-row__main" onClick={onOpen}>
-          <span className="idea-row__title">{idea.title}</span>
-          <span className="idea-row__meta">
-            <span className="idea-status" style={{ color: STATUS_FARBE[idea.status] }}>
-              <span className="idea-dot" style={{ background: STATUS_FARBE[idea.status] }} />
-              {t(`ideas.status.${idea.status}` as never)}
-            </span>
-            {idea.tag && <span className="idea-tagmark">{idea.tag}</span>}
-            {wer && <><Avatar user={wer} size={15} /> {wer.displayName}</>}
-            · {relativeTime(idea.createdAt)}
-            {idea.commentCount > 0 && (
-              <> · <MessageSquare size={10} /> {idea.commentCount}</>
-            )}
+      <button className="idea-row__main" onClick={onOpen}>
+        <span className="idea-row__title">{idea.title}</span>
+        <span className="idea-row__meta">
+          <span className="idea-status" style={{ color: STATUS_FARBE[idea.status] }}>
+            <span className="idea-dot" style={{ background: STATUS_FARBE[idea.status] }} />
+            {t(`ideas.status.${idea.status}` as never)}
           </span>
-        </button>
-      </motion.div>
-    );
-  }
+          {idea.tag && <span className="idea-tagmark">{idea.tag}</span>}
+          {wer && <><Avatar user={wer} size={15} /> {wer.displayName}</>}
+          · {relativeTime(idea.createdAt)}
+          {idea.commentCount > 0 && (
+            <> · <MessageSquare size={10} /> {idea.commentCount}</>
+          )}
+        </span>
+      </button>
+    </motion.div>
+  );
+}
 
-  function VoteBox({ idea }: { idea: Idea }) {
-    const { voteIdea } = useStore.getState();
-    const darf = Boolean(self?.permissions['idea.vote']);
-    const saldo = idea.upvotes - idea.downvotes;
+function VoteBox({ idea }: { idea: Idea }) {
+  const t = useT();
+  const self = useStore((s) => s.self);
+  const { voteIdea } = useStore.getState();
+  const darf = Boolean(self?.permissions['idea.vote']);
+  const saldo = idea.upvotes - idea.downvotes;
 
-    return (
-      <div className="idea-vote">
-        <button
-          className={clsx('idea-vote__btn', idea.myVote === 1 && 'idea-vote__btn--on')}
-          disabled={!darf}
-          title={t('ideas.voteUp')}
-          aria-label={t('ideas.voteUp')}
-          onClick={() => voteIdea(idea.id, 1)}
-        >
-          <ThumbsUp size={14} />
-        </button>
-        <motion.span
-          key={saldo}
-          className="idea-vote__zahl"
-          initial={{ scale: 1.35 }}
-          animate={{ scale: 1 }}
-          transition={{ type: 'spring', stiffness: 420, damping: 18 }}
-          style={{ color: saldo > 0 ? 'var(--green)' : saldo < 0 ? 'var(--red)' : undefined }}
-        >
-          {saldo > 0 ? `+${saldo}` : saldo}
-        </motion.span>
-        <button
-          className={clsx('idea-vote__btn', idea.myVote === -1 && 'idea-vote__btn--off')}
-          disabled={!darf}
-          title={t('ideas.voteDown')}
-          aria-label={t('ideas.voteDown')}
-          onClick={() => voteIdea(idea.id, -1)}
-        >
-          <ThumbsDown size={14} />
-        </button>
-      </div>
-    );
-  }
+  return (
+    <div className="idea-vote">
+      <button
+        className={clsx('idea-vote__btn', idea.myVote === 1 && 'idea-vote__btn--on')}
+        disabled={!darf}
+        title={t('ideas.voteUp')}
+        aria-label={t('ideas.voteUp')}
+        onClick={() => voteIdea(idea.id, 1)}
+      >
+        <ThumbsUp size={14} />
+      </button>
+      <motion.span
+        key={saldo}
+        className="idea-vote__zahl"
+        initial={{ scale: 1.35 }}
+        animate={{ scale: 1 }}
+        transition={{ type: 'spring', stiffness: 420, damping: 18 }}
+        style={{ color: saldo > 0 ? 'var(--green)' : saldo < 0 ? 'var(--red)' : undefined }}
+      >
+        {saldo > 0 ? `+${saldo}` : saldo}
+      </motion.span>
+      <button
+        className={clsx('idea-vote__btn', idea.myVote === -1 && 'idea-vote__btn--off')}
+        disabled={!darf}
+        title={t('ideas.voteDown')}
+        aria-label={t('ideas.voteDown')}
+        onClick={() => voteIdea(idea.id, -1)}
+      >
+        <ThumbsDown size={14} />
+      </button>
+    </div>
+  );
 }
 
 /* ── Neue Idee ──────────────────────────────────────────────── */
