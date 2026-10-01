@@ -2058,6 +2058,15 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       return fehler(reply, 400, 'fehler.teilnummer', 'Ungültige Teilnummer.');
     }
 
+    /* Läuft schon das Zusammenlegen, ist jeder neue Teil zu spät: er
+       überschriebe eine Teildatei, die `/finish` gerade liest, oder legte
+       nach dessen Aufräumen eine neue an, die kein Eintrag in `teilUploads`
+       mehr kennt — auch der stündliche Besen nicht. Sie bliebe für immer. */
+    if (auftrag.abschluss) {
+      return fehler(reply, 409, 'fehler.uploadLaeuft',
+        'Dieser Upload wird gerade schon abgeschlossen.');
+    }
+
     const zuGross = () => fehler(reply, 413, 'fehler.dateiZuGross',
       `Datei überschreitet ${Math.round(auftrag.size / 1024 / 1024)} MB`,
       { mb: String(Math.round(auftrag.size / 1024 / 1024)) });
