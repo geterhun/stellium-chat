@@ -319,7 +319,18 @@ export function paypalZugangSetzen(werte: {
      den alten Schlüssel — sonst behauptete die Diagnose nach einem Wechsel
      Rechte, die der neue Schlüssel vielleicht gar nicht hat. */
   setSetting(SCHLUESSEL_SCOPE, null, userId);
+  /* Was in diesem Moment noch unterwegs ist (ein Token-Abruf, ein ganzer
+     Durchgang), wurde mit den ALTEN Zugangsdaten gestartet. Kommt es danach
+     an, darf es weder den Token-Speicher noch die Zahlen füllen — siehe
+     tokenHolen() und paypalAktualisieren(). */
+  zugangsFassung += 1;
 }
+
+/** Zählt jede Änderung der Zugangsdaten mit. Ein Abruf merkt sich den Stand
+ *  bei seinem Start; passt er bei der Ankunft nicht mehr, gehört die Antwort
+ *  zu Zugangsdaten, die es nicht mehr gibt (womöglich einem anderen Konto
+ *  oder der anderen Umgebung). */
+let zugangsFassung = 0;
 
 /* ══ HTTP ══════════════════════════════════════════════════════════════ */
 
@@ -523,6 +534,7 @@ function tokenVergessen(): void {
 }
 
 async function tokenHolen(): Promise<string> {
+  const fassung = zugangsFassung;
   const clientId = clientIdLesen();
   const clientSecret = clientSecretLesen();
   /* Technische Marke, kein Anzeigetext — fehlerEinordnen() macht daraus den
@@ -574,6 +586,13 @@ async function tokenHolen(): Promise<string> {
     throw new PaypalFehler(res.status, '', res.headers.get('paypal-debug-id'),
       'NO_ACCESS_TOKEN', 'paypal:kein-access-token');
   }
+
+  /* Wurden die Zugangsdaten gewechselt, während diese Anfrage unterwegs
+     war, gehört der Token zu den alten: dem Aufrufer, der ihn angefordert
+     hat, nützt er nichts mehr (sein Durchgang wird ohnehin verworfen, siehe
+     paypalAktualisieren()), und im Zwischenspeicher bediente er bis zu
+     seinem Ablauf — Stunden — jeden weiteren Abruf mit dem alten Konto. */
+  if (fassung !== zugangsFassung) return daten.access_token;
 
   /* Die tatsächlich gewährten Rechte merken — die Diagnose vergleicht sie
      später gegen PAYPAL_SCOPES_PFLICHT. Der Token selbst wird NICHT
@@ -1120,6 +1139,9 @@ export function paypalUebersicht(): PaypalUebersicht {
 /* ══ Der Abrufdurchgang ════════════════════════════════════════════════ */
 
 let durchgangLaeuft: Promise<PaypalWerte> | null = null;
+/** Mit welchem Stand der Zugangsdaten (zugangsFassung) der laufende Durchgang
+ *  gestartet wurde. */
+let durchgangFassung = 0;
 let letzterVollerDurchgang = 0;
 
 async function euroKurseNachtragen(salden: PaypalSaldo[]): Promise<void> {
@@ -1219,21 +1241,37 @@ export async function paypalAktualisieren(
   if (durchgangLaeuft) {
     /* Ein bereits laufender Durchgang wird MITBENUTZT, nicht abgewartet und
        dann noch einmal gemacht. Scheitert er, hat er seinen Fehler bereits
-       selbst vermerkt — der Mitbenutzer liest ihn aus der Ablage. */
+       selbst vermerkt — der Mitbenutzer liest ihn aus der Ablage.
+       Ausnahme: er läuft noch mit Zugangsdaten, die inzwischen gewechselt
+       wurden (der typische Fall: speichern, dann sofort „aktualisieren").
+       Dann wird er abgewartet und danach frisch gefragt — sein Ergebnis
+       gehört zum alten Schlüssel und taugt nicht als Antwort. */
+    const veraltet = durchgangFassung !== zugangsFassung;
     try {
       await durchgangLaeuft;
-      return { ok: true };
+      if (!veraltet) return { ok: true };
     } catch (f) {
-      const info = fehlerEinordnen(f);
-      return { ok: false, code: info.code, detail: info.detail };
+      if (!veraltet) {
+        const info = fehlerEinordnen(f);
+        return { ok: false, code: info.code, detail: info.detail };
+      }
     }
+    return paypalAktualisieren(opts);
   }
 
+  const fassung = zugangsFassung;
+  durchgangFassung = fassung;
   durchgangLaeuft = durchgangAusfuehren(opts.nurSalden === true)
     .finally(() => { durchgangLaeuft = null; });
 
   try {
     const werte = await durchgangLaeuft;
+    /* Während des Durchgangs (bis zu DURCHGANG_BUDGET_MS) wurden die
+       Zugangsdaten gewechselt: die Zahlen gehören zum alten Schlüssel,
+       womöglich zur anderen Umgebung. paypalZugangSetzen() hat die Tafel
+       für genau diesen Fall geleert — sie hier wieder zu füllen, zeigte
+       „aktuell" mit dem Kontostand eines anderen Kontos. */
+    if (fassung !== zugangsFassung) return paypalAktualisieren(opts);
     werteStand = werte;
     werteGeladen = true;
     werteSichern(werte);
@@ -1242,6 +1280,8 @@ export async function paypalAktualisieren(
     setSetting(SCHLUESSEL_LETZTER_FEHLER_SEIT, null, SYSTEM);
     return { ok: true };
   } catch (f) {
+    // Ein Fehlschlag mit den alten Zugangsdaten sagt über die neuen nichts.
+    if (fassung !== zugangsFassung) return paypalAktualisieren(opts);
     const info = fehlerEinordnen(f);
     /* Der Zeitpunkt des ERSTEN Fehlschlags bleibt stehen, solange es nicht
        wieder klappt: „scheitert seit 11:02" ist eine andere Auskunft als
