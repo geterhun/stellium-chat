@@ -408,8 +408,8 @@ export function setDisabled(userId: string, disabled: boolean): void {
  * Kaskade greift also nie von selbst.
  */
 export function deleteAccount(userId: string): void {
-  const ziel = db.get<{ role: string; deleted_at: number | null }>(
-    'SELECT role, deleted_at FROM users WHERE id = ?', userId,
+  const ziel = db.get<{ role: string; deleted_at: number | null; avatar_url: string | null }>(
+    'SELECT role, deleted_at, avatar_url FROM users WHERE id = ?', userId,
   );
   if (!ziel) throw abweisung('fehler.kontoNichtGefunden', 'Konto nicht gefunden');
   if (ziel.role === 'owner') throw abweisung('fehler.ownerLoeschen', 'Der Owner lässt sich nicht löschen. Erst die Rolle übergeben.');
@@ -571,6 +571,20 @@ export function deleteAccount(userId: string): void {
   /* Auch hier und nicht nur in der Route: wer künftig von anderswoher löscht,
      soll die Sitzungen nicht eigens mitbedenken müssen. */
   sitzungenKappen(userId);
+  /* Das Profilbild selbst. Das UPDATE oben nimmt nur den Verweis weg — die
+     Datei blieb unter ihrer alten Adresse liegen, und /avatare/:datei gab das
+     Gesicht einer gelöschten Person weiter an jedes angemeldete Konto heraus,
+     das die Adresse noch kannte. Erst nach der Transaktion: ein Fehlschlag
+     beim Löschen der Datei darf die Kontolöschung nicht zurückrollen.
+     Nachgeladen statt oben eingebunden, aus demselben Grund wie bei
+     sitzungenKappen(): avatare.ts zieht sharp und legt beim Laden einen
+     Ordner an, was die Werkzeuge ohne Server nicht brauchen. */
+  if (ziel.avatar_url) {
+    const bisherige = ziel.avatar_url;
+    void import('./avatare.js')
+      .then((avatare) => avatare.entfernen(bisherige))
+      .catch((fehler) => console.error('[users] Profilbild nicht entfernt:', (fehler as Error).message));
+  }
 }
 
 /* ── Ersteinrichtung durch die Person selbst ──────────────────── */
