@@ -74,8 +74,10 @@ function bearer(req: FastifyRequest): string | null {
 function bearerOderAdresse(req: FastifyRequest): string | null {
   const ausKopf = bearer(req);
   if (ausKopf) return ausKopf;
-  const roh = (req.query as { token?: string } | undefined)?.token;
-  return roh ? verifyToken(roh) : null;
+  const roh = (req.query as { token?: unknown } | undefined)?.token;
+  /* `?token=a&token=b` kommt als Liste an; verifyToken() liefe darauf mit
+     einem TypeError in eine 500 statt in die 401, die hierher gehört. */
+  return typeof roh === 'string' && roh ? verifyToken(roh) : null;
 }
 
 function requireLeser(req: FastifyRequest): string {
