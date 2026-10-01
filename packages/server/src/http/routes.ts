@@ -1515,6 +1515,15 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     if (id === userId) {
       return fehler(reply, 403, 'fehler.eigeneRolle', 'Die eigene Rolle lässt sich nicht ändern.');
     }
+    /* Und einen Owner herabstufen darf nur ein Owner. Geprüft wurde bis hier
+       nur die NEUE Rolle, nie die bisherige des Ziels — und users.setRole()
+       hält nur den LETZTEN Owner fest. Gab es zwei, stufte ein Administrator
+       mit `user.manage` einen davon zum Gast herab; bei jedem anderen Griff
+       an einem fremden Owner (Zurücksetzen, Sperren, Löschen, Notzugang)
+       steht diese Sperre längst. */
+    if (store.getUser(id)?.role === 'owner' && store.getSelf(userId)?.role !== 'owner') {
+      return fehler(reply, 403, 'fehler.ownerRechte', 'Dem Owner lassen sich keine Rechte nehmen.');
+    }
     /* Ein FREMDES Konto hochzustufen war der eigentliche Weg nach oben, und
        er war offen: gesperrt war nur `owner` und man selbst. Wer `user.manage`
        hatte, machte ein beliebiges Konto zum Administrator, setzte ihm gleich
