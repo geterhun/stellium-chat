@@ -35,3 +35,7 @@ downloads/
 
 # Zugang für die Prüfläufe — gehört niemals ins Repository.
 .stellium-test
+
+# Python-Zwischenstände (konsole-gui, ssh-wache) — entstehen beim Starten von selbst.
+__pycache__/
+*.pyc
