@@ -239,8 +239,14 @@ export function createMessage(input: CreateMessageInput): Message {
       }
     }
 
+    /* Nur eigene Anhänge — dieselbe Regel wie in attachUpload(). Ohne die
+       Bedingung genügte eine fremde, noch freie Anhangskennung, um die Datei
+       einer anderen Person an die eigene Nachricht zu hängen; /files/:id gibt
+       sie dann jedem Mitglied heraus, obwohl sie vorher nur ihrer Urheberin
+       zugänglich war. */
     for (const attId of input.attachmentIds ?? []) {
-      db.run('UPDATE attachments SET message_id = ? WHERE id = ? AND message_id IS NULL', id, attId);
+      db.run('UPDATE attachments SET message_id = ? WHERE id = ? AND message_id IS NULL AND uploader_id = ?',
+        id, attId, input.userId);
     }
   });
 
