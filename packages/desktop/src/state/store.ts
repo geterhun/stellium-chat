@@ -570,6 +570,7 @@ let protokollKanal: string | null = null;
  * von Kanal B, ein Klick schickte sie dorthin.
  */
 let catchupAnfrage: string | null = null;
+let sucheNr = 0;
 let vorschlagAnfrage: string | null = null;
 
 function protokollBeenden(fehler: string | null): boolean {
@@ -1473,12 +1474,17 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   runSearch: async (q, channelId) => {
+    /* Nur die jüngste Suche zählt: eine langsame Antwort für „ab" überschrieb
+       sonst die schon angezeigten Treffer für „abc". */
+    const nr = ++sucheNr;
     if (q.trim().length < 2) { set({ searchHits: [], searching: false }); return; }
     set({ searching: true });
     try {
       const { hits } = await api.search({ q, channelId });
+      if (nr !== sucheNr) return;
       set({ searchHits: hits, searching: false });
     } catch (err) {
+      if (nr !== sucheNr) return;
       set({ searchHits: [], searching: false });
       get().toast({ kind: 'error', title: ts('toast.searchFailed'), body: (err as Error).message });
     }

@@ -76,7 +76,6 @@ export function useLesemarke(
     zuletztGemeldet.current = null;
     sichtbar.current = new Set();
     return () => melden();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelId]);
 
   // Das Fenster bekommt Aufmerksamkeit zurück (Tab gewechselt, App wieder
@@ -89,7 +88,6 @@ export function useLesemarke(
       document.removeEventListener('visibilitychange', beruecksichtigen);
       window.removeEventListener('focus', beruecksichtigen);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelId]);
 
   // Der Beobachter selbst — neu aufgesetzt, wenn sich die dargestellte Liste
@@ -117,6 +115,5 @@ export function useLesemarke(
 
     for (const el of root.querySelectorAll<HTMLElement>('[data-message-id]')) observer.observe(el);
     return () => observer.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelId, stand]);
 }
