@@ -72,13 +72,17 @@ const ZEICHEN_GESAMT = 700;
 export function verlaufAlsKontext(zeilen: VerlaufZeile[]): string | null {
   const gebaut: string[] = [];
   let laenge = 0;
-  for (const z of zeilen) {
+  /* Von hinten gefüllt: reicht das Gesamtmaß nicht für alle Zeilen, fällt
+     die älteste weg und nicht die unmittelbar vorangehende — gerade die
+     entscheidet, ob eine kurze Antwort Zusage oder Absage ist. */
+  for (let i = zeilen.length - 1; i >= 0; i -= 1) {
+    const z = zeilen[i];
     const text = z.text.replace(/\s+/g, ' ').trim();
     if (!text || istE2EChiffrat(text)) continue;
     const gekuerzterText = text.length > ZEICHEN_JE_ZEILE ? `${text.slice(0, ZEICHEN_JE_ZEILE)}…` : text;
     const zeile = z.wer ? `${z.wer}: ${gekuerzterText}` : gekuerzterText;
     if (laenge + zeile.length + 1 > ZEICHEN_GESAMT) break;
-    gebaut.push(zeile);
+    gebaut.unshift(zeile);
     laenge += zeile.length + 1;
   }
   if (!gebaut.length) return null;

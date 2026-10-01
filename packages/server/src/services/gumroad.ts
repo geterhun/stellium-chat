@@ -374,12 +374,24 @@ export async function gumroadSyncLauf(): Promise<GumroadSyncErgebnis> {
            Zeile mit demselben subscription_id an (siehe Dateikopf, Punkt zu
            laufzeitVonVerkauf/subscription_duration weiter unten in dieser
            Datei) — trägt `verkauf_gumroad_verkaeufe` schon eine ANDERE Zeile
-           mit demselben subscription_id, ist dies nicht die erste Abbuchung. */
-        const art = !abo ? 'einmalig' as const
-          : ((db.get<{ n: number }>(
+           mit demselben subscription_id, ist dies nicht die erste Abbuchung.
+           Nur ÄLTERE Zeilen zählen: die Ablage oben hat alle Verkäufe dieses
+           Laufs schon geschrieben — fallen Erstkauf und erste Verlängerung in
+           denselben Lauf (die Kachel war einen Monat zu), stünde sonst die
+           Verlängerung als „andere Zeile" neben dem Erstkauf, und der neue
+           Abonnent würde nie als neu gemeldet. */
+        const erstelltAm = zeitpunkt(v.created_at);
+        const aelterVorhanden = !abo ? false : (erstelltAm !== null
+          ? db.get<{ n: number }>(
+              'SELECT COUNT(*) as n FROM verkauf_gumroad_verkaeufe WHERE subscription_id = ? AND id != ? AND erstellt_am < ?',
+              abo, v.id, erstelltAm,
+            )?.n ?? 0
+          : db.get<{ n: number }>(
               'SELECT COUNT(*) as n FROM verkauf_gumroad_verkaeufe WHERE subscription_id = ? AND id != ?',
               abo, v.id,
-            )?.n ?? 0) > 0 ? 'verlaengerung' as const : 'neu' as const);
+            )?.n ?? 0) > 0;
+        const art = !abo ? 'einmalig' as const
+          : aelterVorhanden ? 'verlaengerung' as const : 'neu' as const;
         const probeBis = abo
           ? db.get<{ probe_bis: number | null }>(
               'SELECT probe_bis FROM verkauf_gumroad_abonnenten WHERE id = ?', abo,

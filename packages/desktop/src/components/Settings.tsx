@@ -533,6 +533,12 @@ function PostEinstellungen() {
         name: name.trim(),
       });
       setStand((s) => (s ? { ...s, ...z } : s));
+      useStore.getState().toast({ kind: 'ok', title: t('schluessel.gespeichert') });
+    } catch (err) {
+      /* Ohne das verschwand ein Fehlschlag lautlos in einer verworfenen
+         Zusage — derselbe Fehler, den SchluesselEinstellungen darunter
+         schon behoben hat. */
+      useStore.getState().toast({ kind: 'error', title: t('schluessel.speichernFehlgeschlagen'), body: (err as Error).message });
     } finally {
       setLaeuft(false);
     }

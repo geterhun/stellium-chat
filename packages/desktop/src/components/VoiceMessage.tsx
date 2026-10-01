@@ -26,10 +26,20 @@ export function VoiceMessage({ voice, messageId, translatedText, showOriginal }:
   const [duration, setDuration] = useState(voice.durationMs ? voice.durationMs / 1000 : 0);
   const ai = useStore((s) => s.ai);
 
+  /* Aufnahmen aus MediaRecorder (webm) tragen keine Länge im Kopf — Chromium
+     meldet `duration` dann als Infinity. Ohne Rückfall auf die beim Aufnehmen
+     gemessene Länge blieb der Fortschritt bei null stehen, und Spulen ging
+     gar nicht. */
+  const laenge = (audio: HTMLAudioElement) =>
+    (Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : (voice.durationMs ?? 0) / 1000);
+
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    const onTime = () => setProgress(audio.duration ? audio.currentTime / audio.duration : 0);
+    const onTime = () => {
+      const d = laenge(audio);
+      setProgress(d ? Math.min(1, audio.currentTime / d) : 0);
+    };
     const onMeta = () => { if (Number.isFinite(audio.duration)) setDuration(audio.duration); };
     const onEnd = () => { setPlaying(false); setProgress(0); };
     audio.addEventListener('timeupdate', onTime);
@@ -46,13 +56,19 @@ export function VoiceMessage({ voice, messageId, translatedText, showOriginal }:
     const audio = audioRef.current;
     if (!audio) return;
     if (playing) { audio.pause(); setPlaying(false); }
-    else { void audio.play(); setPlaying(true); }
+    else {
+      setPlaying(true);
+      // Scheitert das Abspielen (Datei fehlt, Format unbekannt), stünde der
+      // Knopf sonst für immer auf „Pause".
+      audio.play().catch(() => setPlaying(false));
+    }
   };
 
   const seek = (fraction: number) => {
     const audio = audioRef.current;
-    if (!audio || !Number.isFinite(audio.duration)) return;
-    audio.currentTime = audio.duration * fraction;
+    const d = audio ? laenge(audio) : 0;
+    if (!audio || !d) return;
+    audio.currentTime = d * fraction;
     setProgress(fraction);
   };
 

@@ -50,7 +50,7 @@ import * as partnerGruppen from '../services/post-partnergruppen.js';
 import { registerPostEingang } from './posteingang.js';
 import { downloadSeite, systemErkennen } from './download/seite.js';
 
-import { broadcastAll, onlineUserIds, sitzungenBeenden, verbindungen } from '../ws/gateway.js';
+import { broadcastAll, nutzerVerteilen, onlineUserIds, sitzungenBeenden, verbindungen } from '../ws/gateway.js';
 import * as ablage from '../services/ablage.js';
 import * as avatare from '../services/avatare.js';
 import { huelleSchreiben, umschlagVonDatei } from '../crypto/dateien.js';
@@ -74,8 +74,10 @@ function bearer(req: FastifyRequest): string | null {
 function bearerOderAdresse(req: FastifyRequest): string | null {
   const ausKopf = bearer(req);
   if (ausKopf) return ausKopf;
-  const roh = (req.query as { token?: string } | undefined)?.token;
-  return roh ? verifyToken(roh) : null;
+  const roh = (req.query as { token?: unknown } | undefined)?.token;
+  /* `?token=a&token=b` kommt als Liste an; verifyToken() liefe darauf mit
+     einem TypeError in eine 500 statt in die 401, die hierher gehört. */
+  return typeof roh === 'string' && roh ? verifyToken(roh) : null;
 }
 
 function requireLeser(req: FastifyRequest): string {
@@ -1445,7 +1447,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       const person = store.getUser(konto.userId);
       // Ohne diese Meldung lernten die anderen Clients das neue Konto erst
       // beim nächsten Neuladen kennen — bis dahin ließe es sich nicht erwähnen.
-      if (person) broadcastAll({ t: 'user:upsert', user: person });
+      if (person) nutzerVerteilen(person);
       return {
         credential: {
           userId: konto.userId,
@@ -1515,6 +1517,15 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     if (id === userId) {
       return fehler(reply, 403, 'fehler.eigeneRolle', 'Die eigene Rolle lässt sich nicht ändern.');
     }
+    /* Und einen Owner herabstufen darf nur ein Owner. Geprüft wurde bis hier
+       nur die NEUE Rolle, nie die bisherige des Ziels — und users.setRole()
+       hält nur den LETZTEN Owner fest. Gab es zwei, stufte ein Administrator
+       mit `user.manage` einen davon zum Gast herab; bei jedem anderen Griff
+       an einem fremden Owner (Zurücksetzen, Sperren, Löschen, Notzugang)
+       steht diese Sperre längst. */
+    if (store.getUser(id)?.role === 'owner' && store.getSelf(userId)?.role !== 'owner') {
+      return fehler(reply, 403, 'fehler.ownerRechte', 'Dem Owner lassen sich keine Rechte nehmen.');
+    }
     /* Ein FREMDES Konto hochzustufen war der eigentliche Weg nach oben, und
        er war offen: gesperrt war nur `owner` und man selbst. Wer `user.manage`
        hatte, machte ein beliebiges Konto zum Administrator, setzte ihm gleich
@@ -1579,7 +1590,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     try {
       users.setDisabled(id, Boolean(disabled));
       const person = store.getUser(id);
-      if (person) broadcastAll({ t: 'user:upsert', user: person });
+      if (person) nutzerVerteilen(person);
       return { users: store.listManagedUsers() };
     } catch (err) {
       return weiterreichen(reply, 400, err);
@@ -1599,7 +1610,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       // Der Eintrag bleibt als "Ehemaliges Mitglied" bestehen; alle sollen das
       // sofort sehen, statt weiter einen aktiven Kontakt anzuzeigen.
       const person = store.getUser(id);
-      if (person) broadcastAll({ t: 'user:upsert', user: person });
+      if (person) nutzerVerteilen(person);
       return { users: store.listManagedUsers() };
     } catch (err) {
       return weiterreichen(reply, 400, err);
@@ -1675,7 +1686,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
         const user = store.getUser(userId);
         // Ohne diese Meldung sähen die anderen das neue Bild erst nach einem
         // Neustart der App — derselbe Weg wie bei jeder anderen Profiländerung.
-        if (user) broadcastAll({ t: 'user:upsert', user });
+        if (user) nutzerVerteilen(user);
         return { user };
       } catch (err) {
         return weiterreichen(reply, 400, err);
@@ -1696,7 +1707,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     await avatare.entfernen(bisherige);
 
     const user = store.getUser(userId);
-    if (user) broadcastAll({ t: 'user:upsert', user });
+    if (user) nutzerVerteilen(user);
     return { user };
   });
 
@@ -1718,7 +1729,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     await avatare.entfernen(bisherige);
 
     const user = store.getUser(id);
-    if (user) broadcastAll({ t: 'user:upsert', user });
+    if (user) nutzerVerteilen(user);
     return { users: store.listManagedUsers() };
   });
 
@@ -2047,6 +2058,15 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     const nummer = Number.parseInt(index, 10);
     if (!Number.isInteger(nummer) || nummer < 0 || nummer >= auftrag.parts) {
       return fehler(reply, 400, 'fehler.teilnummer', 'Ungültige Teilnummer.');
+    }
+
+    /* Läuft schon das Zusammenlegen, ist jeder neue Teil zu spät: er
+       überschriebe eine Teildatei, die `/finish` gerade liest, oder legte
+       nach dessen Aufräumen eine neue an, die kein Eintrag in `teilUploads`
+       mehr kennt — auch der stündliche Besen nicht. Sie bliebe für immer. */
+    if (auftrag.abschluss) {
+      return fehler(reply, 409, 'fehler.uploadLaeuft',
+        'Dieser Upload wird gerade schon abgeschlossen.');
     }
 
     const zuGross = () => fehler(reply, 413, 'fehler.dateiZuGross',
@@ -3660,9 +3680,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
        als Bild angezeigt ergäbe es ein kaputtes Bild, und der Browser bekäme
        eine Angabe über den Inhalt, die nicht stimmt. Die App holt sich die
        Datei, entschlüsselt sie und zeigt sie selbst an. */
-    const inline = !datei.privat
-      && (/^(image|video|audio)\//.test(datei.mime) || datei.mime === 'application/pdf');
+    const inline = !datei.privat && inlineTauglich(datei.mime);
     reply.header('content-type', datei.privat ? 'application/octet-stream' : datei.mime);
+    reply.header('x-content-type-options', 'nosniff');
     reply.header('content-disposition', `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(datei.name)}`);
 
     const strom = ablage.oeffnen({
@@ -3713,9 +3733,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
        Browser bekäme eine Angabe über den Inhalt, die nicht stimmt. Die App
        holt sich die Bytes, schließt sie auf und zeigt sie selbst an. */
     const verschlossen = Boolean(row.huelle);
-    const inline = !verschlossen
-      && (/^(image|video|audio)\//.test(row.mime) || row.mime === 'application/pdf');
+    const inline = !verschlossen && inlineTauglich(row.mime);
     reply.header('content-type', verschlossen ? 'application/octet-stream' : row.mime);
+    reply.header('x-content-type-options', 'nosniff');
     reply.header('content-disposition', `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(row.name)}`);
     reply.header('cache-control', 'private, max-age=31536000, immutable');
 
@@ -3723,6 +3743,25 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     if (!strom) return fehler(reply, 404, 'fehler.dateiNichtGefunden', 'Datei nicht gefunden');
     return reply.send(strom);
   });
+}
+
+/**
+ * Darf eine hochgeladene Datei im Browser direkt angezeigt werden?
+ *
+ * Der Typ ist eine Behauptung des Hochladenden (multipart-Kopf, bei
+ * `/api/uploads/bekannt` sogar ein freies JSON-Feld). `image/svg+xml` ist
+ * ein Dokument mit Skript: inline ausgeliefert läuft es unter DIESER Adresse,
+ * also unter derselben Herkunft wie die Browser-Oberfläche — und der Link
+ * dorthin trägt das `?token=` der Person, die ihn öffnet (FilesPanel.tsx
+ * öffnet Ablage-Dateien in einem neuen Tab). Ein Kollege lädt eine SVG mit
+ * Skript hoch, jemand klickt auf „Herunterladen", und das Skript liest das
+ * fremde Token aus der eigenen Adresse. Als Anhang ausgeliefert lädt der
+ * Browser sie nur herunter; ein <img src> zeigt sie trotzdem an, weil der
+ * die Kopfzeile `content-disposition` gar nicht beachtet.
+ */
+function inlineTauglich(mime: string): boolean {
+  if (/svg|xml/i.test(mime)) return false;
+  return /^(image|video|audio)\//.test(mime) || mime === 'application/pdf';
 }
 
 /** Bildmaße aus dem Header lesen — reicht für PNG, JPEG, GIF und WebP. */

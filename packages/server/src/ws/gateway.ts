@@ -2,7 +2,7 @@ import type { WebSocket } from 'ws';
 import { kennungVon } from '../util/abweisung.js';
 import {
   decode, encode, isSupportedLang, normalizeLang, regionFuerZeitzone, WS_PROTOCOL_VERSION,
-  type ClientEvent, type Message, type ServerEvent, type Task, type TranslationView, type UserStatus,
+  type ClientEvent, type Message, type ServerEvent, type Task, type TranslationView, type User, type UserStatus,
   type Vorschlag, type PostMeldung, type StoredFile,
 } from '@stellium/shared';
 import { verifyToken } from '../auth.js';
@@ -116,6 +116,27 @@ function wartungMelden(session: Session, w: wartung.Wartung): void {
 /** Für Ereignisse, die außerhalb des Gateways entstehen (z. B. HTTP-Uploads). */
 export function broadcastAll(ev: ServerEvent): void {
   broadcast(ev);
+}
+
+/** Wie `ready` eine Person zeigt: getrennt heißt offline, und die Frist
+    bleibt nur sichtbar, wo sie kein „unsichtbar" verrät (siehe setStatus). */
+function nutzerSicht(u: User, betrachter: string): User {
+  const sichtbar = isOnline(u.id) ? u.status : 'offline';
+  return {
+    ...u,
+    status: sichtbar,
+    statusExpiresAt: u.id === betrachter || sichtbar !== 'offline' ? u.statusExpiresAt : null,
+  };
+}
+
+/**
+ * Eine geänderte Person an alle verteilen — jede Verbindung in der Sicht,
+ * die auch `ready` liefert. Ein rohes `store.getUser()` trüge den
+ * gespeicherten Status: die Frist eines „unsichtbar" und bei Getrennten die
+ * eigene Wahl, die `close` mit laufender Frist stehen lässt.
+ */
+export function nutzerVerteilen(u: User): void {
+  for (const uid of byUser.keys()) sendToUser(uid, { t: 'user:upsert', user: nutzerSicht(u, uid) });
 }
 
 /**
@@ -340,6 +361,22 @@ function darfNachrichtLesen(userId: string, messageId: string): boolean {
 function broadcast(ev: ServerEvent, userIds?: Iterable<string>): void {
   if (userIds) { for (const uid of userIds) sendToUser(uid, ev); return; }
   for (const s of sessions.values()) if (s.userId) send(s, ev);
+}
+
+/**
+ * Einen Kanal an seinen Kreis verteilen — jeder Person in IHRER Sicht.
+ *
+ * store.getChannel(id, viewerId) legt die Übersetzung von Name und Thema in
+ * der Sprache von `viewerId` bei (und dmPeerId aus dessen Blickwinkel). Ein
+ * einziges, für die auslösende Person gebautes Objekt an alle zu rufen hieße,
+ * allen anderen deren Sprache unterzuschieben — der Client ersetzt den Kanal
+ * bei channel:upsert ganz. `undefined` heißt wie bei broadcast(): alle.
+ */
+function kanalVerteilen(channelId: string, kreis?: Iterable<string>): void {
+  for (const uid of kreis ?? [...byUser.keys()]) {
+    const ch = store.getChannel(channelId, uid);
+    if (ch) sendToUser(uid, { t: 'channel:upsert', channel: ch });
+  }
 }
 
 /**
@@ -990,6 +1027,14 @@ export function handleConnection(socket: WebSocket): void {
     const ev = decode<ClientEvent>(raw.toString());
     if (!ev || typeof ev.t !== 'string') return;
     if (ev.t === 'auth') {
+      /* Eine Sitzung meldet sich genau einmal an. Ein zweites `auth` mit dem
+         Token eines anderen Kontos setzte sonst `session.userId` um, während
+         die Sitzung weiter in `byUser` des ersten Kontos stünde — sie bekäme
+         dessen Ereignisse weiter zugestellt, und beim Schließen räumte
+         `close` nur beim zweiten Konto auf: das erste stünde für immer als
+         verbunden da. Der eigene Client schickt `auth` ohnehin nur einmal
+         je Leitung (net/socket.ts, onopen). */
+      if (session.userId) return;
       clearTimeout(authTimer);
       // Ohne dieses catch würde ein Fehler beim Anmelden — eine hakende
       // Datenbank genügt — als unbehandelte Zurückweisung den ganzen Server
@@ -1037,7 +1082,28 @@ export function handleConnection(socket: WebSocket): void {
            läse der Leerlaufwächter einen uralten Zeitpunkt und stellte sie
            sofort auf abwesend. */
         letzteAktion.delete(session.userId);
-        setStatus(session.userId, 'offline');
+        /* Eine eigene Wahl mit laufender Frist bleibt in der Datenbank
+           stehen — nach außen gilt trotzdem „offline". Vorher wurde hier
+           stur 'offline' geschrieben, und authenticate() las beim
+           Wiederkommen genau dieses 'offline' als die eigene Wahl zurück
+           (statusHaelt() ist dann ja noch wahr): aus „bitte nicht stören"
+           wurde nach dem ersten Netzwackler „unsichtbar" — verbunden, aber
+           für alle anderen fort. Den Rundruf an die anderen formt dieselbe
+           Regel wie in setStatus(): die Frist verriete ein „unsichtbar". */
+        if (statusHaelt(session.userId)) {
+          const jetzt = Date.now();
+          db.run('UPDATE users SET last_seen_at = ? WHERE id = ?', jetzt, session.userId);
+          const u = store.getUser(session.userId);
+          if (u) {
+            broadcast({
+              t: 'presence', userId: u.id, status: 'offline',
+              statusEmoji: u.statusEmoji, statusText: u.statusText,
+              statusExpiresAt: null, lastSeenAt: u.lastSeenAt,
+            });
+          }
+        } else {
+          setStatus(session.userId, 'offline');
+        }
       }
     }
   });
@@ -1138,12 +1204,9 @@ async function authenticate(session: Session, ev: Extract<ClientEvent, { t: 'aut
   send(session, {
     t: 'ready',
     self,
-    users: store.listUsers().map((u) => ({
-      ...u,
-      status: isOnline(u.id) ? u.status : 'offline',
-      // Aus demselben Grund wie in setStatus: die Frist verriete ein „unsichtbar".
-      statusExpiresAt: u.id === userId || u.status !== 'offline' ? u.statusExpiresAt : null,
-    })),
+    // Am sichtbaren Status gemessen, nicht am gespeicherten — wer getrennt
+    // ist, behält seine eigene Wahl dort stehen (siehe `close` oben).
+    users: store.listUsers().map((u) => nutzerSicht(u, userId)),
     channels: store.visibleChannels(userId),
     states: store.channelStates(userId),
     scheduled: store.scheduledFor(userId),
@@ -1271,8 +1334,9 @@ function minuten(w: unknown): number | null | undefined {
 
 /* ── Bremse gegen unbegrenzte KI-Aufrufe ──────────────────────────
  *
- * Betroffen: compose:preview, translate:request, ai:catchup, ai:protocol,
- * ai:ask, ai:extract-tasks — jeder dieser Wege ruft am Ende einen bezahlten
+ * Betroffen: compose:preview, translate:request, translate:roundtrip,
+ * ai:catchup, ai:protocol, ai:ask, ai:extract-tasks, ai:thread-summary,
+ * ai:smart-replies, ai:reaction-suggest, ai:rewrite — jeder dieser Wege ruft am Ende einen bezahlten
  * Anbieter (Vorgabe groq, siehe config.ts, aktiverAnbieter()). `void
  * handleEvent(...)` in handleConnection() oben wartet nicht auf die Antwort,
  * bevor es das nächste Ereignis desselben Sockets annimmt — eine Sitzung
@@ -1454,9 +1518,17 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
 
     case 'channel:leave': {
       const warVertraulich = vertraulich.istVertraulich(ev.channelId);
+      /* Wie bei channel:hide: die Folgen unten gelten nur, wenn wirklich
+         jemand gegangen ist. channels.leaveChannel() tut für ein
+         Nichtmitglied stillschweigend nichts — ohne diese Prüfung genügte die
+         Kennung eines fremden vertraulichen Kanals, um dessen Mitglieder
+         beliebig oft zum Schlüsselwechsel aufzufordern, und
+         kanalElementeZuruecknehmen() verriete die Kennungen der Aufgaben,
+         Termine und Ideen eines privaten Kanals, in dem man nie war. */
+      const warMitglied = store.isMember(ev.channelId, userId);
       channels.leaveChannel(ev.channelId, userId);
       sendToUser(userId, { t: 'channel:removed', channelId: ev.channelId });
-      kanalElementeZuruecknehmen(ev.channelId, [userId]);
+      if (warMitglied) kanalElementeZuruecknehmen(ev.channelId, [userId]);
       /* Ohne dies blieb `openChannelId` auf diesem Kanal stehen, und
          deliverMessage()/prefs:update() lasen ihn weiter aus (siehe die
          ausführliche Begründung bei offenenKanalVergessen() oben). */
@@ -1464,7 +1536,7 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
       /* Wer geht, nimmt den Kanalschlüssel auf seinem Gerät mit. Ohne Wechsel
          läse er alles Neue weiter mit — er müsste den Kanal dafür nicht einmal
          sehen, ein mitgeschriebenes Chiffrat genügte. */
-      if (warVertraulich) {
+      if (warVertraulich && warMitglied) {
         for (const uid of store.memberIds(ev.channelId)) {
           if (!vertraulich.kannLesen(ev.channelId, uid)) continue;
           sendToUser(uid, {
@@ -1490,7 +1562,12 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
 
     case 'channel:delete': {
       if (!darf(session, 'channel.delete')) return;
-      const betroffen = store.memberIds(ev.channelId);
+      /* Einen offenen Kanal sieht jede Person in der Seitenleiste, auch ohne
+         Mitglied zu sein (store.visibleChannels) — bekäme die Meldung nur der
+         Mitgliederkreis, stünde er bei allen anderen bis zum nächsten Neuladen
+         als Leiche da. Kreis und Art vor dem Löschen, danach ist die Zeile weg. */
+      const offen = store.getChannel(ev.channelId)?.kind === 'public';
+      const betroffen = offen ? undefined : store.memberIds(ev.channelId);
       const info = channels.deleteChannel(ev.channelId);
       broadcast({ t: 'channel:removed', channelId: ev.channelId }, betroffen);
       console.log(`[kanal] #${info.name} gelöscht (${info.messages} Nachrichten) von ${userId}`);
@@ -1508,7 +1585,8 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
       const warMitglied = store.isMember(ev.channelId, userId);
       channels.hideChannel(ev.channelId, userId);
       sendToUser(userId, { t: 'channel:removed', channelId: ev.channelId });
-      kanalElementeZuruecknehmen(ev.channelId, [userId]);
+      // Nur wer dabei war, hat etwas zurückzunehmen — siehe channel:leave.
+      if (warMitglied) kanalElementeZuruecknehmen(ev.channelId, [userId]);
       // Dieselbe Begründung wie bei channel:leave — Ausblenden tut hier
       // dasselbe wie Verlassen, also braucht es auch dieselbe Aufräumung.
       offenenKanalVergessen(userId, ev.channelId);
@@ -1727,7 +1805,11 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
       if (!darfNachrichtAendern(userId, ev.messageId)) {
         return fail(session, 'fehler.keinNachrichtZugang', 'Zu dieser Nachricht hast du keinen Zugang.');
       }
-      const scope = ev.scope ?? 'all';
+      /* Alles außer 'me' heißt „für alle". Vorher kam ein unbekannter Wert
+         (etwa 'x') an der Rechteprüfung unten vorbei, die nur auf 'all'
+         schaut — messages.deleteMessage() behandelt aber alles außer 'me' als
+         Löschen für alle. So ließ sich ohne das Recht zum Löschen löschen. */
+      const scope = ev.scope === 'me' ? 'me' : 'all';
       const eigene = store.getMessage(ev.messageId)?.userId === userId;
       // Für sich ausblenden darf jede:r immer — das ändert nichts für andere.
       if (scope === 'all' && !darf(session, eigene ? 'message.delete_own' : 'message.delete_any')) return;
@@ -1938,13 +2020,24 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
        * den alles von selbst zurückfällt. Ihn festzuhalten hieße, den
        * Leerlaufwächter für acht Stunden abzuschalten.
        */
+      /* Dieselbe Strenge wie bei prefs:update (EINSTELLUNGEN oben): alles
+         hier geht per `presence` an jede offene Verbindung im Haus. Ungeprüft
+         ließ sich ein Status namens „lila" setzen oder ein Statustext mit
+         Megabytes, den dann jede Sitzung zugestellt bekam. Die Grenze von 80
+         Zeichen ist die der Oberfläche (StatusMenu, MELDUNG_MAX). */
+      const status = ausListe(ev.status, ['online', 'away', 'dnd', 'offline']) as UserStatus | undefined;
+      if (!status) return;
+      const emoji = ev.statusEmoji === undefined ? undefined : text(ev.statusEmoji, 64);
+      const statusText = ev.statusText === undefined ? undefined : text(ev.statusText, 80);
+      const gewuenschteFrist = typeof ev.statusExpiresAt === 'number' && Number.isFinite(ev.statusExpiresAt)
+        ? ev.statusExpiresAt : undefined;
       const automatisch = ev.statusExpiresAt === null;
       if (automatisch && statusHaelt(userId)) return;
       const frist = automatisch
         ? null
-        : ev.statusExpiresAt ?? (ev.status === 'online' ? null : Date.now() + MANUELL_HAELT_MS);
+        : gewuenschteFrist ?? (status === 'online' ? null : Date.now() + MANUELL_HAELT_MS);
       if (!automatisch) letzteAktion.set(userId, Date.now());
-      setStatus(userId, ev.status, ev.statusEmoji, ev.statusText, frist);
+      setStatus(userId, status, emoji, statusText, frist);
       return;
     }
 
@@ -1983,7 +2076,7 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
         s.autoTranslate = session.autoTranslate;
         send(s, { t: 'self:updated', self });
       }
-      broadcast({ t: 'user:upsert', user: store.getUser(userId)! });
+      nutzerVerteilen(store.getUser(userId)!);
 
       // Sprache gewechselt -> offenen Kanal in der neuen Sprache nachliefern
       if (ev.patch.language && session.openChannelId) {
@@ -2073,6 +2166,12 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
         return fail(session, 'fehler.keinNachrichtZugang', 'Zu dieser Nachricht hast du keinen Zugang.');
       }
       if (klartextNoetigFuerNachricht(session, ev.messageId)) return;
+      /* Der Rückweg umgeht den Übersetzungs-Cache immer (skipCache:true in
+         roundTrip()) — jede Anfrage ist also ein echter Modellaufruf, genau
+         wie translate:request mit force. Ohne Bremse war das der Weg, auf dem
+         sich beide Grenzen oben unbegrenzt umgehen ließen. */
+      if (!kiForceZugang(session)) return;
+      if (!kiZugang(session)) return;
       const result = await roundTrip(ev.messageId, ev.targetLang);
       if (!result) return fail(session, 'fehler.keineUebersetzungDa', 'Für diese Nachricht liegt keine Übersetzung vor');
       send(session, { t: 'roundtrip', messageId: ev.messageId, targetLang: ev.targetLang, ...result });
@@ -2136,6 +2235,7 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
         return fail(session, 'fehler.nachrichtNichtGefunden', 'Nachricht nicht gefunden', ev.requestId);
       }
       if (klartextNoetigFuerNachricht(session, ev.messageId)) return;
+      if (!kiZugang(session, ev.requestId)) return;
       const summary = await ai.summarizeThread(ev.messageId, session.language);
       send(session, { t: 'ai:thread-summary', requestId: ev.requestId, messageId: ev.messageId, summary });
       return;
@@ -2146,6 +2246,7 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
       // Vorschläge entstehen aus dem Verlauf — also nur, wo man mitliest.
       if (!kanalZugang(session, ev.channelId, ev.requestId)) return;
       if (klartextNoetig(session, ev.channelId)) return;
+      if (!kiZugang(session, ev.requestId)) return;
       const self = store.getSelf(userId)!;
       const replies = await ai.smartReplies({
         channelId: ev.channelId, parentId: ev.parentId ?? null,
@@ -2161,6 +2262,7 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
         return fail(session, 'fehler.nachrichtNichtGefunden', 'Nachricht nicht gefunden', ev.requestId);
       }
       if (klartextNoetigFuerNachricht(session, ev.messageId)) return;
+      if (!kiZugang(session, ev.requestId)) return;
       const emojis = await emojiVorschlaege.reactionSuggest(ev.messageId, session.language);
       send(session, { t: 'ai:reaction-suggest', requestId: ev.requestId, messageId: ev.messageId, emojis });
       return;
@@ -2173,6 +2275,7 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
          vertraulich ist. */
       if (ev.channelId && !kanalZugang(session, ev.channelId, ev.requestId)) return;
       if (klartextNoetig(session, ev.channelId)) return;
+      if (!kiZugang(session, ev.requestId)) return;
       const text = await ai.rewrite({ text: ev.text, tone: ev.tone, targetLang: ev.targetLang ?? null });
       send(session, { t: 'ai:rewrite', requestId: ev.requestId, text });
       return;
@@ -2424,8 +2527,7 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
       const self = store.getSelf(userId);
       const channelId = ki.ensureTeamChannel(self?.id ?? userId);
       channels.ensureMember(channelId, userId);
-      const ch = store.getChannel(channelId, userId)!;
-      broadcast({ t: 'channel:upsert', channel: ch });
+      kanalVerteilen(channelId);
       const zustand = store.channelState(channelId, userId);
       if (zustand) send(session, { t: 'channel:state', state: zustand });
       session.openChannelId = channelId;
@@ -2442,8 +2544,8 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
          eingeschaltet da, während nie etwas passiert. */
       if (klartextNoetig(session, ev.channelId)) return;
       ki.setAiMode(ev.channelId, ev.mode);
-      const ch = store.getChannel(ev.channelId, userId);
-      if (ch) broadcast({ t: 'channel:upsert', channel: ch }, ch.kind === 'public' ? undefined : ch.memberIds);
+      const ch = store.getChannel(ev.channelId);
+      if (ch) kanalVerteilen(ch.id, ch.kind === 'public' ? undefined : ch.memberIds);
       return;
     }
 
@@ -2582,14 +2684,19 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
          (alle Aufgaben liegen danach ohne Projekt da) — deshalb das
          Löschrecht, nicht das Anlegerecht. */
       if (!darf(session, 'task.delete')) return;
+      /* Welche Aufgaben in der Schublade lagen, steht nur VOR dem Löschen
+         fest: danach trägt ihre Zeile NULL (ON DELETE SET NULL). Vorher wurde
+         erst hinterher gesucht und `projektId === null` übersprungen — damit
+         gingen genau die betroffenen Aufgaben NICHT hinaus, dafür alle
+         unberührten aus anderen Projekten. */
+      const betroffen = tasks.listTasks({ includeFinished: true })
+        .filter((t) => t.projektId === ev.projektId)
+        .map((t) => t.id);
       projekte.deleteProjekt(ev.projektId);
       broadcast({ t: 'projekt:deleted', projektId: ev.projektId });
       /* Die Aufgaben tragen jetzt kein Projekt mehr — ohne diese Zeile stünde
          auf den Karten noch die alte Schublade, bis jemand neu lädt. */
-      for (const task of tasks.listTasks({ includeFinished: true })) {
-        if (task.projektId === null) continue;
-        broadcastTask(task);
-      }
+      for (const id of betroffen) broadcastTask(tasks.getTask(id));
       return;
     }
 
@@ -2694,12 +2801,16 @@ async function handleEvent(session: Session, ev: ClientEvent): Promise<void> {
       if (!vorschlagSichtbar(session, ev.vorschlagId, ev.requestId)) return;
       try {
         const vorher = vorschlaege.getVorschlag(ev.vorschlagId);
+        /* Vor dem Zurücknehmen nachsehen: ein von sofortEintragen() angelegter
+           Termin ist ein Kalendereintrag, keine Idee (vorschlaege.zuruecknehmen). */
+        const warTermin = vorher?.art === 'termin' && Boolean(vorher.ergebnisId && events.getEvent(vorher.ergebnisId));
         const vorschlag = vorschlaege.zuruecknehmen(ev.vorschlagId, userId);
         /* Das Entstandene ist weg — sonst bliebe die Aufgabe auf den
            Brettern aller anderen stehen, bis jemand neu lädt. */
         if (vorher?.ergebnisId) {
           const kreis = empfaengerFuer(vorschlag.channelId);
           if (vorher.art === 'aufgabe') broadcast({ t: 'task:removed', taskId: vorher.ergebnisId }, kreis);
+          else if (warTermin) broadcast({ t: 'event:removed', eventId: vorher.ergebnisId }, kreis);
           else broadcast({ t: 'idea:removed', ideaId: vorher.ergebnisId }, kreis);
         }
         sendToUser(userId, { t: 'vorschlag:upsert', requestId: ev.requestId, vorschlag });
@@ -3963,7 +4074,14 @@ export function startBackgroundJobs(): () => void {
         try {
           const owner = ownerOfReminder(reminder.id);
           if (!owner) continue;
-          const message = reminder.messageId ? store.getMessage(reminder.messageId, owner) : null;
+          /* Beim Anlegen wurde der Zugang geprüft (reminder:create) — aber
+             zwischen Anlegen und Auslösen kann die Person aus dem Kanal
+             entfernt worden und die Nachricht bearbeitet worden sein. Dann
+             bekäme sie hier den neuen Text einer Nachricht, die sie nicht mehr
+             lesen darf. Die Erinnerung selbst geht trotzdem hinaus, nur ohne
+             Nachricht daran. */
+          const message = reminder.messageId && darfNachrichtLesen(owner, reminder.messageId)
+            ? store.getMessage(reminder.messageId, owner) : null;
           sendToUser(owner, { t: 'reminder:fire', reminder, message });
           if (push.sollBenachrichtigen(owner, { channelId: reminder.channelId, dringend: true })) {
             const vorschau = message?.translation?.text ?? message?.text ?? '';
@@ -4316,8 +4434,15 @@ export function verbindungen(): { clients: number; benutzer: number } {
  * einem Update stünden Leute tagelang als "online" da, die längst weg sind.
  */
 export function anwesenheitZuruecksetzen(): void {
+  /* Eine eigene Wahl mit laufender Frist bleibt stehen, aus demselben Grund
+     wie beim Schließen einer Verbindung (siehe `close` in handleConnection):
+     ein hier geschriebenes 'offline' läse authenticate() nach dem Neustart
+     als eigene Wahl zurück und machte aus „bitte nicht stören" ein
+     „unsichtbar". Nach außen gilt ohnehin, wer verbunden ist (isOnline). */
   const betroffen = database.run(
-    "UPDATE users SET status = 'offline' WHERE status <> 'offline'",
+    "UPDATE users SET status = 'offline' WHERE status <> 'offline' "
+    + 'AND (status_expires_at IS NULL OR status_expires_at <= ?)',
+    Date.now(),
   );
   void betroffen;
 }

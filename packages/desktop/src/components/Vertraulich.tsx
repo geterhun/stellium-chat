@@ -665,7 +665,12 @@ function FreigabenListe({ channelId }: { channelId: string | null }) {
 
             <div className="hstack gap-2" style={{ flexWrap: 'wrap' }}>
               {darfLesen && !zurueck && !abgelaufen && (
-                <button className="btn" onClick={() => { setOffen(offen === f.id ? null : f.id); setFehler(null); }}>
+                <button className="btn" onClick={() => {
+                  /* Der Code gehört zu genau einer Freigabe: stehen geblieben,
+                     ginge er beim nächsten Klick gegen eine andere hinaus und
+                     verbrauchte dort einen der acht Versuche. */
+                  setOffen(offen === f.id ? null : f.id); setFehler(null); setCode('');
+                }}>
                   <KeyRound size={14} /> {t('freigabe.oeffnen')}
                 </button>
               )}

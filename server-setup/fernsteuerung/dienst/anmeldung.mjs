@@ -199,6 +199,8 @@ export class Schatulle {
     /* Beide Richtungen zählen getrennt, sonst käme derselbe Startwert
        zweimal vor — einmal hin, einmal zurück. */
     this.kennung = richtung === 'pi' ? 1 : 2;
+    /* Der höchste Zähler, der bisher HEREIN kam. Siehe `auf`. */
+    this.zuletzt = -1n;
   }
 
   startwert() {
@@ -222,11 +224,26 @@ export class Schatulle {
     const iv = paket.subarray(1, 13);
     const marke = paket.subarray(13, 29);
     const geheim = paket.subarray(29);
+    /* Die Prüfsumme sagt nur, dass ein Paket mit diesem Schlüssel gebaut
+       wurde — nicht, dass es zum ersten Mal kommt. Ohne diese beiden Zeilen
+       konnte, wer auf der Leitung sitzt, ein mitgeschnittenes Eingabepaket
+       einfach noch einmal einspielen: der Pi hätte dieselben Tasten ein
+       zweites Mal gedrückt. Ebenso ließ sich ein Paket des Pi an ihn selbst
+       zurückspiegeln, weil beide Richtungen denselben Schlüssel tragen.
+       Also: nur die Kennung der Gegenrichtung, und der Zähler muss steigen.
+       Über TCP kommt ohnehin alles in der Reihenfolge an, in der es abging. */
+    if (iv.readUInt32BE(0) !== this.kennung) return null;
+    const zaehler = iv.readBigUInt64BE(4);
+    if (zaehler <= this.zuletzt) return null;
     try {
       const d = crypto.createDecipheriv('aes-256-gcm', this.schluessel, iv);
       d.setAAD(Buffer.from([art]));
       d.setAuthTag(marke);
-      return { art, inhalt: Buffer.concat([d.update(geheim), d.final()]) };
+      const inhalt = Buffer.concat([d.update(geheim), d.final()]);
+      /* Erst nach bestandener Prüfung — sonst schöbe ein gefälschtes Paket
+         den Zähler vor und sperrte die echten aus. */
+      this.zuletzt = zaehler;
+      return { art, inhalt };
     } catch {
       return null;                 /* verfälscht — verwerfen, nicht raten */
     }

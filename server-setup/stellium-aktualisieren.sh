@@ -105,6 +105,9 @@ zurueck() {
 # .env trägt Schlüssel und Masterpasswort und liegt bewusst nicht im Paket.
 # Das Einspielen räumt das Verzeichnis aber leer — also vorher beiseitelegen.
 EIGENES="$(mktemp -d)"
+# Darin liegt eine Kopie von .env — Masterpasswort und Schlüssel. Ohne
+# Aufräumen blieb nach jedem Update eine weitere davon in /tmp liegen.
+trap 'rm -rf "$EIGENES"' EXIT
 einstellungen_retten() {
   local d
   for d in .env packages/server/.env; do

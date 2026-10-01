@@ -246,7 +246,13 @@ export function UpdatePanel() {
                       aria-label={t('update.remove')}
                       onClick={async () => {
                         if (!confirm(t('update.removeConfirm', { platform: p.name }))) return;
-                        setReleases((await api.removeRelease(p.id)).releases);
+                        /* Ohne Abfangen verschwand ein Fehlschlag lautlos, und der
+                           Eintrag stand weiter da, als hätte der Klick nichts getan. */
+                        try {
+                          setReleases((await api.removeRelease(p.id)).releases);
+                        } catch (err) {
+                          toast({ kind: 'error', title: t('update.failed'), body: (err as Error).message });
+                        }
                       }}
                     >
                       <Trash2 size={15} />

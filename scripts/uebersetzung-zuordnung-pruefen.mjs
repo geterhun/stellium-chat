@@ -36,9 +36,13 @@
  *     Millisekunde, weit bevor A überhaupt in die Rückstellzeit vor Versuch
  *     2 eintritt.
  *
- * B's Fehlschlag löst echt ausfallMelden() -> ersatzUebernimmt() aus und
- * installiert die Vertretung (ein erfundener Groq-Dienst) — noch während A
- * mitten in seiner Rückstellzeit vor Versuch 2 wartet. A's Versuch 2 geht
+ * B's Fehlschlag ist KEIN Ausfall — das Modell hat ja nichts verweigert,
+ * der Text passt bloß nicht hinein. Früher löste er trotzdem ausfallMelden()
+ * aus, und eine einzige lange Nachricht schickte den Verkehr zur Vertretung
+ * im Netz; das prüft dieser Lauf jetzt mit. Die Vertretung installiert
+ * stattdessen ein direkter Aufruf von ausfallMelden() — derselbe Weg, den
+ * translate() bei einer toten Verbindung nimmt —, noch während A mitten in
+ * seiner Rückstellzeit vor Versuch 2 wartet. A's Versuch 2 geht
  * darum tatsächlich an die Vertretung. Genau in diesem Fenster steckte der
  * Fehler.
  *
@@ -146,6 +150,7 @@ async function pruefen() {
     const { migrate } = await import('../packages/server/src/db/migrate.ts');
     initDb(); migrate();
     const { translate, aiCapabilities, ersatzLaeuft } = await import('../packages/server/src/translation/index.ts');
+    const { ausfallMelden } = await import('../packages/server/src/translation/erreichbarkeit.ts');
 
     console.log('\nEigener Rechner an — ein einleitender Erfolg setzt "lage" auf erreichbar');
     const einleitend = await translate({ text: 'good morning everyone', targetLang: 'de', sourceLang: 'en' });
@@ -177,9 +182,7 @@ async function pruefen() {
     const PHRASE_B = 'this message is intentionally far too long for the model context window right now. ';
     let TEXT_B = '';
     while (TEXT_B.length < 30000) TEXT_B += PHRASE_B;
-    const pB = translate({ text: TEXT_B, targetLang: 'de', sourceLang: 'en' });
-
-    const [ergebnisA, ergebnisB] = await Promise.all([pA, pB]);
+    const ergebnisB = await translate({ text: TEXT_B, targetLang: 'de', sourceLang: 'en' });
 
     pruefe(
       'B scheitert rein rechnerisch (zu lang fürs Kontextfenster), nicht als Übersetzung',
@@ -187,12 +190,26 @@ async function pruefen() {
       `unuebersetzt=${ergebnisB.unuebersetzt}, noop=${ergebnisB.noop}`,
     );
     pruefe(
-      'B hat die Vertretung installiert',
+      'B allein holt KEINE Vertretung — zu lang ist kein Ausfall des eigenen Modells',
+      ersatzLaeuft() === null,
+      `ersatzLaeuft()="${ersatzLaeuft()}"`,
+    );
+
+    // A wartet jetzt in seiner Rückstellzeit vor Versuch 2. Genau hier fällt
+    // der Rechner offiziell aus — wie bei einer toten Verbindung in translate().
+    ausfallMelden('Prüflauf: eigener Rechner antwortet nicht');
+    // Die Vertretung zieht über einen spät geladenen import() ein (siehe
+    // erreichbarkeit.ts) — kurz warten, weit innerhalb von A's Rückstellzeit.
+    await new Promise((r) => setTimeout(r, 30));
+    pruefe(
+      'die Vertretung ist installiert, während A noch wartet',
       ersatzLaeuft() === 'groq',
       `ersatzLaeuft()="${ersatzLaeuft()}"`,
     );
+
+    const ergebnisA = await pA;
     pruefe(
-      'A wurde tatsächlich über die Vertretung beantwortet (Versuch 2, nach B\'s Fehlschlag)',
+      'A wurde tatsächlich über die Vertretung beantwortet (Versuch 2, nach dem Ausfall)',
       ergebnisA.provider === 'groq' && !ergebnisA.unuebersetzt,
       `provider="${ergebnisA.provider}", unuebersetzt=${ergebnisA.unuebersetzt}`,
     );

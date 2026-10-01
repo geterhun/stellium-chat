@@ -557,6 +557,21 @@ export function anfrage<T>(
  * ein Fehler ohne Kennung, eine abgerissene Leitung, und gar keine Antwort.
  */
 let protokollFrist: number | null = null;
+/** Für welchen Kanal das laufende Protokoll angefragt wurde. Ein spätes
+    Protokoll für Kanal A stand sonst auf der Tafel von Kanal B. */
+let protokollKanal: string | null = null;
+
+/**
+ * Die jüngste Anfrage nach Zusammenfassung bzw. Antwortvorschlägen.
+ *
+ * Eine KI-Antwort darf eine halbe Minute brauchen. Wer in der Zeit den Kanal
+ * wechselt und dort neu fragt, bekam sonst, was zuletzt ANKAM, nicht was
+ * zuletzt GEFRAGT wurde — die Vorschläge aus Kanal A standen im Schreibfeld
+ * von Kanal B, ein Klick schickte sie dorthin.
+ */
+let catchupAnfrage: string | null = null;
+let sucheNr = 0;
+let vorschlagAnfrage: string | null = null;
 
 function protokollBeenden(fehler: string | null): boolean {
   if (protokollFrist === null) return false;
@@ -1397,10 +1412,15 @@ export const useStore = create<StoreState>((set, get) => ({
       return;
     }
     const requestId = uid();
+    catchupAnfrage = requestId;
     set({ catchupLoading: true, overlay: 'catchup', catchup: null });
     void awaitReply<AiSummary>(requestId)
-      .then((summary) => set({ catchup: summary, catchupLoading: false }))
+      .then((summary) => {
+        if (catchupAnfrage !== requestId) return;
+        set({ catchup: summary, catchupLoading: false });
+      })
       .catch((err: Error) => {
+        if (catchupAnfrage !== requestId) return;
         set({ catchupLoading: false });
         get().toast({ kind: 'error', title: ts('toast.summaryFailed'), body: err.message });
       });
@@ -1414,17 +1434,27 @@ export const useStore = create<StoreState>((set, get) => ({
   loadSmartReplies: (channelId, parentId) => {
     if (!get().ai?.assistant) return;
     const requestId = uid();
+    vorschlagAnfrage = requestId;
     set({ smartRepliesLoading: true, smartReplies: [] });
     void awaitReply<SmartReply[]>(requestId, 30_000)
-      .then((replies) => set({ smartReplies: replies, smartRepliesLoading: false }))
+      .then((replies) => {
+        if (vorschlagAnfrage !== requestId) return;
+        // Inzwischen woanders: dort gehören diese Vorschläge nicht hin.
+        const nochHier = get().activeChannelId === channelId;
+        set({ smartReplies: nochHier ? replies : [], smartRepliesLoading: false });
+      })
       .catch((err: Error) => {
+        if (vorschlagAnfrage !== requestId) return;
         set({ smartReplies: [], smartRepliesLoading: false });
         get().toast({ kind: 'error', title: ts('toast.noSuggestions'), body: err.message });
       });
     frageHinaus(requestId, { t: 'ai:smart-replies', requestId, channelId, parentId: parentId ?? null });
   },
 
-  clearSmartReplies: () => set({ smartReplies: [], smartRepliesLoading: false }),
+  clearSmartReplies: () => {
+    vorschlagAnfrage = null;
+    set({ smartReplies: [], smartRepliesLoading: false });
+  },
 
   rewrite: async (text, tone, targetLang) => {
     const requestId = uid();
@@ -1444,12 +1474,17 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   runSearch: async (q, channelId) => {
+    /* Nur die jüngste Suche zählt: eine langsame Antwort für „ab" überschrieb
+       sonst die schon angezeigten Treffer für „abc". */
+    const nr = ++sucheNr;
     if (q.trim().length < 2) { set({ searchHits: [], searching: false }); return; }
     set({ searching: true });
     try {
       const { hits } = await api.search({ q, channelId });
+      if (nr !== sucheNr) return;
       set({ searchHits: hits, searching: false });
     } catch (err) {
+      if (nr !== sucheNr) return;
       set({ searchHits: [], searching: false });
       get().toast({ kind: 'error', title: ts('toast.searchFailed'), body: (err as Error).message });
     }
@@ -1601,6 +1636,7 @@ export const useStore = create<StoreState>((set, get) => ({
       return;
     }
     set({ protocolLoading: true, protocol: null, protocolFehler: null });
+    protokollKanal = channelId;
     if (protokollFrist !== null) clearTimeout(protokollFrist);
     protokollFrist = window.setTimeout(() => protokollBeenden(ts('toast.aiTimeout')), KI_FRIST_MS);
     if (!socket.send({ t: 'ai:protocol', channelId })) {
@@ -1608,6 +1644,7 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
   clearProtocol: () => {
+    protokollKanal = null;
     if (protokollFrist !== null) { clearTimeout(protokollFrist); protokollFrist = null; }
     set({ protocol: null, protocolLoading: false, protocolFehler: null });
   },
@@ -2230,7 +2267,10 @@ socket.onEvent((ev: ServerEvent) => {
     case 'reminder:fire': {
       useStore.setState((s) => ({ reminders: s.reminders.filter((r) => r.id !== ev.reminder.id) }));
       const channel = store.channels[ev.reminder.channelId];
-      const preview = ev.message?.translation?.text ?? ev.message?.text ?? '';
+      const roh = ev.message?.translation?.text ?? ev.message?.text ?? '';
+      /* Aus einem vertraulichen Kanal kommt hier Chiffrat — das gehört weder
+         in die Meldung noch auf den Sperrbildschirm (wie in notifyIfNeeded). */
+      const preview = istE2EChiffrat(roh) ? '' : roh;
       store.toast({
         kind: 'info',
         title: ev.reminder.note || ts('reminder.one'),
@@ -2323,6 +2363,7 @@ socket.onEvent((ev: ServerEvent) => {
       break;
 
     case 'ai:protocol':
+      if (ev.protocol.channelId !== protokollKanal) break;
       protokollBeenden(null);
       useStore.setState({ protocol: ev.protocol, protocolLoading: false, protocolFehler: null });
       break;
@@ -2547,7 +2588,9 @@ function notifyIfNeeded(msg: Message): void {
   if (focused) return;
 
   const author = s.users[msg.userId];
-  const title = isDm ? (author?.displayName ?? ts('toast.newMessage')) : `#${channel?.name ?? 'Kanal'}`;
+  const title = isDm
+    ? (author?.displayName ?? ts('toast.newMessage'))
+    : (channel?.name ? `#${channel.name}` : ts('toast.newMessage'));
   const prefix = isDm ? '' : `${author?.displayName ?? ''}: `;
   /* Übersetzung bevorzugen, damit die Vorschau in der eigenen Sprache steht.
      Aus einem vertraulichen Kanal geht nichts vom Inhalt in die

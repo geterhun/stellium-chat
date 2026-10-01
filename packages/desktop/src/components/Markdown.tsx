@@ -135,7 +135,14 @@ function renderInline(text: string, ctx: Ctx): ReactNode[] {
       out.push(<del key={key++}>{renderInline(raw.slice(2, -2), ctx)}</del>);
     } else if (m[5]) {
       const link = /\[([^\]]+)\]\(([^)\s]+)\)/.exec(raw);
-      if (link) out.push(<ExternalLink key={key++} href={link[2]}>{link[1]}</ExternalLink>);
+      // Nur http(s) wird zum Link: "[klick](javascript:…)" landete sonst im
+      // Browser ungeprüft in window.open — dort fehlt die Prüfung, die der
+      // Electron-Hauptprozess vor shell.openExternal macht.
+      if (link && /^https?:\/\//i.test(link[2])) {
+        out.push(<ExternalLink key={key++} href={link[2]}>{link[1]}</ExternalLink>);
+      } else {
+        out.push(raw);
+      }
     } else if (m[6]) {
       out.push(<ExternalLink key={key++} href={raw}>{raw.replace(/^https?:\/\//, '')}</ExternalLink>);
     } else if (m[7]) {

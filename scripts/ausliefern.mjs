@@ -180,8 +180,11 @@ function zugang() {
   // Schlüsselbund: nichts liegt im Klartext auf der Platte.
   for (const konto of [ausUmgebung.login || 'claude', 'don']) {
     try {
-      const wert = execSync(
-        `security find-generic-password -s stellium-veroeffentlichen -a ${JSON.stringify(konto)} -w`,
+      /* Ohne Shell: der Kontoname kann aus STELLIUM_LOGIN stammen, und in
+         doppelten Anführungszeichen hätte die Shell darin `$` und Backticks
+         noch ausgewertet. */
+      const wert = execFileSync(
+        'security', ['find-generic-password', '-s', 'stellium-veroeffentlichen', '-a', konto, '-w'],
         { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
       ).trim();
       if (wert) return { login: konto, passwort: wert, quelle: 'Schlüsselbund' };
@@ -492,7 +495,17 @@ if (!ohneGit && !probe) {
         warn(`Commit übersprungen: ${text.slice(0, 200)}`);
       }
     }
-    lauf('git', ['push', '-q', 'origin', 'HEAD']);
+    /* Ein eigenes try auch hier: scheiterte das Schieben (Netz weg, oder
+       origin ist inzwischen weiter), sprang der Ablauf in den äußeren catch
+       — und die Marke darunter wurde gar nicht erst gesetzt, nicht einmal
+       lokal. Mit --ohne-github entstand sie dann nirgends, und der nächste
+       Lauf vergab dieselbe Fassungsnummer ein zweites Mal (siehe unten).
+       Was offen bleibt, meldet die Zählung am Ende dieses Abschnitts. */
+    try {
+      lauf('git', ['push', '-q', 'origin', 'HEAD']);
+    } catch (err) {
+      warn(`Schieben fehlgeschlagen: ${(err.stderr || err.message).slice(0, 200)}`);
+    }
 
     /*
      * Die Marke SELBST setzen, nicht auf GitHub warten.
@@ -599,8 +612,14 @@ if (!ohneHier && !probe && process.platform === 'darwin') {
       lauf('bash', ['-c', 'sleep 3; pkill -f "Stellium.app/Contents/MacOS/Stellium" || true; sleep 1']);
       lauf('hdiutil', ['attach', '-nobrowse', '-quiet', dmg]);
       const band = `/Volumes/Stellium ${naechste}`;
-      lauf('bash', ['-c', `rm -rf /Applications/Stellium.app && cp -R ${JSON.stringify(`${band}/Stellium.app`)} /Applications/`]);
-      lauf('hdiutil', ['detach', band, '-quiet']);
+      /* Aushängen auch dann, wenn das Kopieren scheitert. Ein Abbild, das
+         hängen bleibt, lässt beim nächsten Ausliefern das DMG an
+         `hdiutil detach` scheitern (siehe AUSLIEFERN.md). */
+      try {
+        lauf('bash', ['-c', `rm -rf /Applications/Stellium.app && cp -R ${JSON.stringify(`${band}/Stellium.app`)} /Applications/`]);
+      } finally {
+        try { lauf('hdiutil', ['detach', band, '-quiet']); } catch { /* war schon weg */ }
+      }
       lauf('bash', ['-c', 'xattr -dr com.apple.quarantine /Applications/Stellium.app || true']);
       lauf('open', ['-a', 'Stellium']);
       ok(`Stellium ${naechste} läuft`);

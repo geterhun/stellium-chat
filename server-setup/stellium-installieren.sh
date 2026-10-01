@@ -425,7 +425,9 @@ if [[ -f "$UMGEBUNG" ]] && grep -q STELLIUM_MASTER_PASSPHRASE "$UMGEBUNG"; then
   info "Masterpasswort besteht bereits — bleibt unverändert"
 else
   MASTER="$(head -c 32 /dev/urandom | base64 | tr -d '=+/' | head -c 43)"
-  cat > "$UMGEBUNG" <<ENV
+  # Mit umask 077 angelegt: sonst stand das Masterpasswort bis zum chmod
+  # weiter unten für jedes Konto lesbar da (0644).
+  ( umask 077; cat > "$UMGEBUNG" ) <<ENV
 # Von stellium-installieren.sh erzeugt. Nicht ins Netz stellen.
 STELLIUM_MASTER_PASSPHRASE=$MASTER
 DATA_DIR=$DATEN
@@ -764,7 +766,7 @@ else
   # ── DuckDNS: Adresse aktuell halten ─────────────────────────
   if [[ "$WAHL" == "2" ]]; then
     schritt "DuckDNS"
-    cat > /etc/stellium-duckdns <<DUCK
+    ( umask 077; cat > /etc/stellium-duckdns ) <<DUCK
 DUCK_NAME=$DUCK_NAME
 DUCK_TOKEN=$DUCK_TOKEN
 DUCK
@@ -927,7 +929,11 @@ schritt "Firewall und Einbruchsschutz"
 # gelegt —, dann räumt der reset die einzige Regel weg, über die noch jemand
 # hereinkommt. Beim nächsten Lauf wäre der Pi zu, und niemand käme mehr dran.
 # Deshalb die tatsächlichen Ports erfragen, statt 22 anzunehmen.
-SSH_PORTS="$(sshd -T 2>/dev/null | awk '/^port /{print $2}' | sort -un)"
+# Das "|| true" trägt die Rückfallebene darunter: ohne laufenden SSH-Dienst
+# (auf Raspberry Pi OS ab Werk aus) bricht `sshd -T` ab, weil /run/sshd fehlt,
+# und mit pipefail riss das die ERR-Falle mit — die Einrichtung endete hier,
+# kurz vor der Firewall, statt auf 22 zurückzufallen.
+SSH_PORTS="$(sshd -T 2>/dev/null | awk '/^port /{print $2}' | sort -un || true)"
 [[ -z "$SSH_PORTS" ]] && SSH_PORTS=22
 
 ufw --force reset >/dev/null 2>&1

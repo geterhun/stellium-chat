@@ -125,6 +125,10 @@ export const provider: TranslationProvider = new Proxy({} as TranslationProvider
 
 /** Nach einer Änderung in den Einstellungen neu aufbauen. */
 export async function providerNeuAufbauen(): Promise<void> {
+  /* Der alte Anbieter hat in warmUpModels() einen Takt gestartet, der seine
+     Modell-Liste nachlädt. Ohne Abschalten liefe er nach jedem Wechsel
+     weiter, für einen Anbieter, den niemand mehr fragt. */
+  if (aktiv instanceof OpenAICompatibleProvider) aktiv.registry.stop();
   aktiv = build();
   /* Wer von Hand umstellt, meint es so — eine Vertretung von vorhin hat sich
      damit erledigt. */
@@ -825,8 +829,14 @@ export async function translate(opts: TranslateOptions): Promise<TranslateOutcom
        dann sofort merken. Sonst liefe die nächste Nachricht noch einmal in
        die volle Wartezeit, obwohl längst feststeht, dass niemand da ist.
        Ein 400er oder 429er sagt dagegen nichts über die Erreichbarkeit. */
-    const status = err instanceof ProviderError ? err.status : undefined;
-    if (status === undefined || status === 408) ausfallMelden((err as Error).message);
+    /* Nach der Art, nicht nach dem fehlenden Status: auch "zu lang für das
+       Fenster" und "Antwort enthielt keine Übersetzung" tragen keinen Status
+       — dort HAT das Modell geantwortet. Als Ausfall verbucht, galt der
+       eigene Rechner danach als aus, und die Vertretung im Netz übernahm. */
+    const keineAntwort = err instanceof ProviderError
+      ? err.art === 'unerreichbar' || err.art === 'zeit'
+      : true;
+    if (keineAntwort) ausfallMelden((err as Error).message);
     // Lieber das Original zeigen als gar nichts.
     return {
       ...base, text: mitSentinels, confidence: 0, noop: true, unuebersetzt: true,
@@ -1320,6 +1330,10 @@ export async function translateMessage(
   const mitWache = kurzUndMitVerlauf && ZIELSPRACHEN_MIT_GEPRUEFTER_WACHE.includes(target);
 
   let outcome: TranslateOutcome;
+  /* Der Satz-Cache-Eintrag, den dieser Aufruf in translation_memory
+     angelegt oder getroffen hat — im Wache-Zweig schreibt allein die
+     kontextlose Fassung, auch wenn am Ende die kontextreiche gewinnt. */
+  let satzSchluessel: string | null;
   if (mitWache) {
     const [mitKontext, ohneKontext] = await Promise.all([
       translate({
@@ -1332,6 +1346,7 @@ export async function translateMessage(
       }),
     ]);
     outcome = waehleBeiPolaritaetswache(mitKontext, ohneKontext, target);
+    satzSchluessel = ohneKontext.memoryKey;
   } else {
     // kurzUndMitVerlauf ist hier immer falsch (sonst wäre mitWache wahr,
     // siehe oben) — Verlauf im Kontext bleibt also auf den if-Zweig
@@ -1345,6 +1360,7 @@ export async function translateMessage(
       skipCache: opts.force,
       messwerte: true,
     });
+    satzSchluessel = outcome.memoryKey;
   }
 
   /* Zwischen dem deleted_at-Check ganz oben und hier liegt ein `await` — bei
@@ -1363,17 +1379,18 @@ export async function translateMessage(
      Deshalb hier noch einmal denselben Zustand nachsehen, nicht dem
      msg-Snapshot von vor dem Warten vertrauen — und bei Treffer derselbe
      frühe Ausstieg wie ganz oben, denn ab hier lohnt sich kein Schreiben
-     mehr. outcome.memoryKey (falls translate() dabei einen neuen
-     Satz-Cache-Eintrag in translation_memory angelegt oder einen
-     bestehenden getroffen hat) bleibt dabei unangetastet: ein frischer
-     Eintrag steht mit verweise=0 da, weil ihn keine message_translations-
-     Zeile referenziert — derselbe, dokumentiert normale Zustand wie bei
-     Umfragen/Kanalangaben, kein Aufruf von tmVerweiseNachrechnen() nötig,
-     um das nachzuziehen. Ein bereits bestehender Treffer bleibt exakt bei
-     dem Verweiszähler, den die ANDEREN, weiter existierenden Nachrichten
-     ihm zurecht geben — auch den fasst dieser Ausstieg nicht an. */
+     mehr.
+     translation_memory dagegen hat translate() da schon beschrieben — das
+     INSERT dort liegt VOR dieser Prüfung. Ohne Nachrechnen blieben Quelle
+     und Übersetzung der gelöschten Nachricht dort für immer stehen, genau
+     das, was dropMessageTranslations() verhindern soll. Deshalb hier
+     derselbe Weg: gelöscht wird der Eintrag nur, wenn ihn keine ANDERE
+     Nachricht mehr hält; ein bestehender Treffer behält seinen Zähler. */
   const rohJetzt = db.get<{ deleted_at: number | null }>('SELECT deleted_at FROM messages WHERE id = ?', messageId);
-  if (!rohJetzt || rohJetzt.deleted_at) return null;
+  if (!rohJetzt || rohJetzt.deleted_at) {
+    tmVerweiseNachrechnen([satzSchluessel]);
+    return null;
+  }
 
   // Hat das Modell die Ausgangssprache bestimmt, wo wir unsicher waren?
   // Dann festhalten — davon profitieren alle weiteren Empfänger und die Suche.
@@ -1802,7 +1819,10 @@ export async function translateChannel(
       channelId, target,
     );
     if (cached && cached.source_hash === hash && cached.provider === provider.name) {
-      const daten = JSON.parse(cached.payload) as Omit<ChannelView, 'lang' | 'provider'>;
+      /* Abgelegt wird verschlüsselt (siehe unten) — ohne entschluesseln()
+         scheiterte JSON.parse am "m1:"-Kopf, und jeder Treffer im
+         Zwischenspeicher endete als Fehler statt als Übersetzung. */
+      const daten = JSON.parse(entschluesseln(cached.payload)) as Omit<ChannelView, 'lang' | 'provider'>;
       return { lang: target, ...daten, provider: cached.provider };
     }
   }

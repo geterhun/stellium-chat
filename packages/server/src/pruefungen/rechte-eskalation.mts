@@ -327,6 +327,10 @@ function endpunktRolleSetzen(byId: string, targetId: string, rolleRoh: unknown):
     throw abweisung('fehler.nurOwnerRolle', 'Nur der Owner kann diese Rolle vergeben.');
   }
   if (targetId === byId) throw abweisung('fehler.eigeneRolle', 'Die eigene Rolle lässt sich nicht ändern.');
+  const ziel = db.get<{ role: string }>('SELECT role FROM users WHERE id = ?', targetId);
+  if (ziel?.role === 'owner' && anfragend?.role !== 'owner') {
+    throw abweisung('fehler.ownerRechte', 'Dem Owner lassen sich keine Rechte nehmen.');
+  }
   if (!darfRolleVergeben(byId, rolle)) {
     throw abweisung('fehler.rolleZuHoch', 'Die Rolle kannst du nicht vergeben.');
   }

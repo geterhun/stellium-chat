@@ -126,6 +126,10 @@ function meldungsName(m: VerkaufMeldung): string {
 let bekannteIds = new Set<string>();
 let ersterAbruf = true;
 let takt: number | null = null;
+/* Zählt jedes Zurücksetzen mit. Ein Abruf, der vor der Abmeldung losging und
+   erst danach zurückkommt, trüge sonst die Zeilen des vorigen Kontos in den
+   frisch geleerten Laden — samt Abzeichen für die nächste Person. */
+let generation = 0;
 
 export const useVerkaufMeldungenUi = create<VerkaufMeldungenState>((set, get) => ({
   offen: false,
@@ -144,11 +148,13 @@ export const useVerkaufMeldungenUi = create<VerkaufMeldungenState>((set, get) =>
     set({ gestartet: true });
 
     const abrufen = async () => {
+      const meine = generation;
       let seite: VerkaufMeldung[];
       try {
         const antwort = await verkaufFetch<{ meldungen: VerkaufMeldung[] }>(
           `/api/verkauf/meldungen?anzahl=${SEITENGROESSE_ABZEICHEN}`,
         );
+        if (meine !== generation) return;
         seite = antwort.meldungen;
       } catch {
         // Kein Recht, kein Netz, Server gerade nicht erreichbar — dieselbe
@@ -179,7 +185,10 @@ export const useVerkaufMeldungenUi = create<VerkaufMeldungenState>((set, get) =>
         });
       } else {
         const gesamtCent = neu.reduce((summe, m) => summe + (m.betragCent ?? 0), 0);
-        const waehrung = neu.find((m) => m.waehrung)?.waehrung;
+        /* Eine Summe nur bei EINER Währung: 10 € und 10 $ ergaben vorher
+           „20 €". Gemischt bleibt es bei der Anzahl im Titel. */
+        const waehrungen = new Set(neu.map((m) => m.waehrung).filter(Boolean));
+        const waehrung = waehrungen.size === 1 ? [...waehrungen][0] : null;
         useStore.getState().toast({
           kind: 'info',
           title: tStatisch('verkaufMeldung.toastTitelSammel' as TranslationKey, { anzahl: neu.length }),
@@ -195,6 +204,7 @@ export const useVerkaufMeldungenUi = create<VerkaufMeldungenState>((set, get) =>
   },
 
   zuruecksetzen: () => {
+    generation += 1;
     verkaufMeldungenTaktAnhalten();
     bekannteIds = new Set();
     ersterAbruf = true;

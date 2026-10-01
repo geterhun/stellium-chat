@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawn, execFile } from 'node:child_process';
@@ -448,6 +447,16 @@ async function ladenVersuch(update: Fern, halb: string, ziel: string): Promise<v
     throw new UpdateFehler('update.reason.urlMismatch');
   }
 
+  /* Außerhalb des try, damit `finally` ihn auch nach einem Abbruch schließt.
+     Ohne das blieb bei jedem gescheiterten Anlauf ein offener Dateigriff
+     stehen — und ein Schreibfehler (Platte voll, Datei weggeräumt) hatte
+     keinen Hörer: Node wirft ein 'error' ohne Hörer als ungefangene
+     Ausnahme im Hauptprozess, und das Warten auf 'drain' darunter kam nie
+     zurück. Dann hing `laeuft` für den Rest der Sitzung auf true, und es
+     wurde nie wieder nach einer Fassung gefragt. */
+  let schreiber: fs.WriteStream | null = null;
+  let schreibFehler: Error | null = null;
+
   try {
     const antwort = await fetch(quelle, { headers: kopf, signal: abbruch.signal });
     if (!antwort.ok || !antwort.body) throw new UpdateFehler('update.reason.downloadFailed', { status: antwort.status });
@@ -456,16 +465,23 @@ async function ladenVersuch(update: Fern, halb: string, ziel: string): Promise<v
     const setztFort = antwort.status === 206 && schon > 0;
     if (!setztFort && schon > 0) fs.rmSync(halb, { force: true });
 
-    const schreiber = fs.createWriteStream(halb, { flags: setztFort ? 'a' : 'w', highWaterMark: 1024 * 1024 });
+    const strom = fs.createWriteStream(halb, { flags: setztFort ? 'a' : 'w', highWaterMark: 1024 * 1024 });
+    schreiber = strom;
+    strom.on('error', (err) => { schreibFehler = err; });
     let geladen = setztFort ? schon : 0;
     let zuletztGemeldet = 0;
 
     for await (const stueck of antwort.body as unknown as AsyncIterable<Uint8Array>) {
       const buf = Buffer.from(stueck);
       letzteRegung = Date.now();
-      if (!schreiber.write(buf)) {
-        await new Promise<void>((f) => { schreiber.once('drain', () => f()); });
+      if (!strom.write(buf)) {
+        await new Promise<void>((f) => {
+          const weiter = () => { strom.off('drain', weiter); strom.off('close', weiter); f(); };
+          strom.on('drain', weiter);
+          strom.on('close', weiter);
+        });
       }
+      if (schreibFehler) throw schreibFehler;
       geladen += buf.byteLength;
       // Höchstens viermal je Sekunde melden — sonst überschwemmt der
       // Fortschritt die Oberfläche mit Nachrichten.
@@ -476,7 +492,7 @@ async function ladenVersuch(update: Fern, halb: string, ziel: string): Promise<v
       }
     }
     await new Promise<void>((fertig, schief) => {
-      schreiber.end((err?: Error | null) => (err ? schief(err) : fertig()));
+      strom.end((err?: Error | null) => (err ? schief(err) : fertig()));
     });
 
     const gross = fs.statSync(halb).size;
@@ -495,6 +511,7 @@ async function ladenVersuch(update: Fern, halb: string, ziel: string): Promise<v
     melden('update:progress', { version: update.version, geladen: update.size, gesamt: update.size });
   } finally {
     clearInterval(wache);
+    (schreiber as fs.WriteStream | null)?.destroy();
   }
 }
 
@@ -698,7 +715,13 @@ async function installiereLinux(datei: string): Promise<void> {
     throw new UpdateFehler('update.reason.notAppImage');
   }
 
-  const skript = path.join(os.tmpdir(), `stellium-update-${Date.now()}.sh`);
+  /* Ins eigene Verzeichnis, nicht nach /tmp — derselbe Grund wie beim
+     Ablageort in laden(): /tmp ist für alle Konten beschreibbar, der Name
+     hier vorhersagbar, und zwischen Schreiben und Ausführen liegen zwei
+     Sekunden. Wer die Datei vorher selbst anlegt, behält sie (writeFileSync
+     schreibt in eine vorhandene Datei, ohne Eigentümer oder Rechte zu
+     ändern) und kann den Inhalt austauschen, bevor bash ihn liest. */
+  const skript = path.join(app.getPath('userData'), `update-${Date.now()}.sh`);
   fs.writeFileSync(skript, `#!/bin/bash
 # Von Stellium erzeugt. Ersetzt das AppImage, sobald es beendet ist.
 sleep 2
@@ -706,7 +729,7 @@ cp -f ${JSON.stringify(datei)} ${JSON.stringify(appimage)}
 chmod +x ${JSON.stringify(appimage)}
 ${JSON.stringify(appimage)} &
 rm -f "$0"
-`, { mode: 0o755 });
+`, { mode: 0o700 });
 
   spawn('/bin/bash', [skript], { detached: true, stdio: 'ignore' }).unref();
 }

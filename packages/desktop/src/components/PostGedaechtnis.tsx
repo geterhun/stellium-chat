@@ -48,7 +48,7 @@
  * Oberfläche blendet die Knöpfe nur zusätzlich aus; durchgesetzt wird es
  * dort.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle, Brain, Check, ChevronDown, ChevronUp, Loader2, Pencil,
   Plus, RefreshCw, Trash2, X,
@@ -114,7 +114,12 @@ export function PostGedaechtnis({ onClose }: { onClose: () => void }) {
   const [fehler, setFehler] = useState<string | null>(null);
   const [neuOffen, setNeuOffen] = useState(false);
 
+  /* Nur die zuletzt gestellte Anfrage zählt: wer „mit Verlauf" schnell an-
+     und wieder ausschaltet, bekäme sonst womöglich die spätere Antwort der
+     ersten Anfrage — und sähe abgelöste Einträge bei ausgeschaltetem Haken. */
+  const ladeNummer = useRef(0);
   const laden = async (verlauf = mitVerlauf) => {
+    const nummer = ++ladeNummer.current;
     setLaedt(true); setFehler(null);
     try {
       const [w, v] = await Promise.all([
@@ -123,13 +128,14 @@ export function PostGedaechtnis({ onClose }: { onClose: () => void }) {
         wissenFetch<{ vorschlaege: WissenVorschlag[]; offen: number; max: number }>(
           '/api/post/wissen/vorschlaege'),
       ]);
+      if (nummer !== ladeNummer.current) return;
       setEintraege(w.eintraege);
       setVorschlaege(v.vorschlaege);
       setGrenze({ anzahl: w.anzahl, max: w.max, offen: v.offen, offenMax: v.max });
     } catch (err) {
-      setFehler((err as Error).message);
+      if (nummer === ladeNummer.current) setFehler((err as Error).message);
     } finally {
-      setLaedt(false);
+      if (nummer === ladeNummer.current) setLaedt(false);
     }
   };
 

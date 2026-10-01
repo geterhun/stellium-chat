@@ -839,9 +839,21 @@ export async function sichten(mailId: string): Promise<SichtungBericht | null> {
   let roh: RohAntwort;
   let modell: string | null;
   let themen: string[];
+  /* Der Modellaufruf dauert Sekunden bis Minuten. Wurde die Mail in dieser
+     Zeit endgültig gelöscht (Art. 17 DSGVO oder die Aufbewahrungsfrist,
+     post.ts::mailsHartLoeschen() räumt dabei auch mail_sichtung und
+     mail_entwuerfe ab), darf hinterher nichts mehr über sie entstehen —
+     sonst bliebe ein Entwurf mit Empfängeradresse und Antworttext zu einer
+     Mail liegen, die es nicht mehr gibt, und eine Push-Meldung trüge ihren
+     Absender und Betreff noch hinaus. Ab der Prüfung läuft alles bis zum
+     Ende ohne `await`, eine Löschung kann also nicht mehr dazwischenkommen. */
+  const nochDa = (): boolean =>
+    db.get<{ da: number }>('SELECT 1 AS da FROM mail_nachrichten WHERE id = ?', mailId) !== undefined;
+
   try {
     ({ roh, modell, themen } = await modellFragen(mail, sprache));
   } catch (err) {
+    if (!nochDa()) return null;
     /* Ein Modell, das nicht antwortet, ist kein Grund, die Mail zu verlieren.
        Zustand vermerken, Menschen benachrichtigen, fertig — `nachzusichten()`
        findet die Zeile später für einen zweiten Anlauf. */
@@ -853,6 +865,7 @@ export async function sichten(mailId: string): Promise<SichtungBericht | null> {
     }));
     return { mailId, zustand: 'fehler', entwurfId: null, benachrichtigt, grund, grundCode: 'modellFehler' };
   }
+  if (!nochDa()) return null;
 
   /* `antwortNoetig` muss ein echtes JSON-true sein. Eine Zeichenkette "true"
      zählt nicht: im Zweifel entscheidet ein Mensch, und eine Meldung zu viel

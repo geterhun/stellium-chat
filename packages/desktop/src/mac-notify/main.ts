@@ -51,6 +51,11 @@ interface KartenZustand {
    *  lassen darf oder angehalten bleiben muss. */
   schwebt: boolean;
   verlassenAusgeloest: boolean;
+  /** Während des Abgangs kam dieselbe Gruppe neu herein. Der Hauptprozess
+   *  behält dabei die Kennung (siehe zeigeKarte() in electron/mac-notify.ts)
+   *  — ein `verwerfen` nach der Animation würfe sonst die NEUE Meldung weg,
+   *  bevor sie je zu sehen war. */
+  nachfolger?: MacNotifyKarte;
 }
 
 const zustaende = new Map<string, KartenZustand>();
@@ -144,6 +149,11 @@ function verlasseKarte(
     z.el.removeEventListener('transitionend', fertig);
     z.el.remove();
     zustaende.delete(id);
+    if (z.nachfolger && grund !== 'klick') {
+      karteErzeugen(z.nachfolger);
+      neuAnordnen();
+      return;
+    }
     if (grund === 'klick') window.stelliumMacNotify?.klicken(id);
     // 'ausgemustert': der Hauptprozess weiß es schon (er hat sie selbst aus
     // dem Stapel geworfen) -- ein weiterer Aufruf wäre nur ein Leerlauf.
@@ -265,6 +275,7 @@ function stapelVerarbeiten(karten: MacNotifyKarte[]): void {
   // ersatzlos verschwinden zu lassen.
   for (const [id, z] of zustaende) {
     if (!z.verlassenAusgeloest && !neueIds.has(id)) verlasseKarte(id, 'ausgemustert');
+    if (!neueIds.has(id)) z.nachfolger = undefined;
   }
 
   reihenfolge = [];
@@ -286,6 +297,8 @@ function stapelVerarbeiten(karten: MacNotifyKarte[]): void {
       }
     } else if (!vorhanden) {
       karteErzeugen(karte);
+    } else if (vorhanden.daten.erstelltAm !== karte.erstelltAm) {
+      vorhanden.nachfolger = karte;
     }
     reihenfolge.push(karte.id);
   }

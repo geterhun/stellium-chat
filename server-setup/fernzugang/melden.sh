@@ -110,15 +110,19 @@ INHALT="$(printf '{\n  "host": "%s",\n  "port": %s,\n  "zeit": "%s",\n  "zeitSte
   "$HOST" "$AUSSEN" "$(date -u -d "@$JETZT" +%Y-%m-%dT%H:%M:%SZ)" "$((JETZT * 1000))")"
 
 ablegen() {
-  local ziel="$1" vorlaeufig
-  [[ -d "$(dirname "$ziel")" ]] || return 0
-  vorlaeufig="$ziel.neu"
-  printf '%s\n' "$INHALT" > "$vorlaeufig"
-  chmod 644 "$vorlaeufig"
-  # Der Server läuft unter seinem eigenen Konto und soll die Datei auch dann
-  # noch ersetzen dürfen, wenn sie einmal root gehört hat.
-  chown stellium:stellium "$vorlaeufig" 2>/dev/null || true
-  mv -f "$vorlaeufig" "$ziel"
+  local ziel="$1" ordner besitzer
+  ordner="$(dirname "$ziel")"
+  [[ -d "$ordner" ]] || return 0
+  # Geschrieben wird als der, dem der Ordner gehört — nicht als root. Beide
+  # Ordner gehören dem Konto stellium, und darin konnte der Chat-Server vorher
+  # unter "zugang.json.neu" einen Verweis auf eine beliebige Datei anlegen:
+  # root schrieb dann alle zehn Minuten den Zettel hinein und übergab sie per
+  # chmod/chown dem Dienstkonto — /etc/shadow etwa. Als Besitzer geschrieben
+  # gehört die Datei dem Server ohnehin, und ein Verweis führt nirgends hin,
+  # wo er nicht schon selbst schreiben darf.
+  besitzer="$(stat -c %U "$ordner")"
+  printf '%s\n' "$INHALT" | runuser -u "$besitzer" -- \
+    sh -c 'umask 022 && cat > "$1.neu" && mv -f "$1.neu" "$1"' ablegen "$ziel"
 }
 
 ablegen "$ZETTEL"

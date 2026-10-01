@@ -56,7 +56,11 @@ sag(`${F.gruen}✓${F.aus} alte Datenbank steht`);
 /* Den heutigen Server darauf loslassen. Ein eigener Port, damit ein laufender
    Entwicklungsserver nicht stört. */
 const port = 5211;
-const server = spawn('npx', ['tsx', 'src/index.ts'], {
+/* tsx direkt, nicht über npx: npx reicht SIGTERM nicht überall an sein Kind
+   weiter (nachgestellt mit npm 10 unter Linux). Der Server lief dann nach dem
+   kill() weiter, hielt die Ausgabe-Rohre offen, und dieses Skript — und mit
+   ihm der Prüfschritt von ausliefern.mjs — kam nie zum Ende. */
+const server = spawn(path.join(wurzel, 'node_modules', '.bin', 'tsx'), ['src/index.ts'], {
   cwd: path.join(wurzel, 'packages/server'),
   env: { ...process.env, DATA_DIR: datenordner, PORT: String(port), OWNER_HANDLE: 'pruefer' },
   stdio: ['ignore', 'pipe', 'pipe'],
@@ -98,3 +102,4 @@ if (!gut) {
 
 sag(`${F.gruen}✓${F.aus} Server läuft auf der nachgerüsteten Datenbank`);
 sag(`\n${F.gruen}1/1 bestanden${F.aus}`);
+process.exit(0);

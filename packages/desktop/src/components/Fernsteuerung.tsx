@@ -267,23 +267,38 @@ export function Fernsteuerung(
 
   useEffect(() => {
     if (!steuert) return;
+    /* Was hier gedrückt und noch nicht losgelassen ist. Verliert das Fenster
+       den Fokus mitten im Drücken — ⌘+Tab auf dem Mac —, kommt das Loslassen
+       nie bei uns an, und auf dem Pi bliebe Strg (bzw. Tab) gedrückt, bis
+       jemand dort dieselbe Taste noch einmal anschlägt. */
+    const gedrueckt = new Set<number>();
     const runter = (e: KeyboardEvent) => {
       const code = TASTEN[e.code];
       if (code === undefined) return;
       e.preventDefault();
+      gedrueckt.add(code);
       fern?.eingabe(`k ${code} 1\n`);
     };
     const hoch = (e: KeyboardEvent) => {
       const code = TASTEN[e.code];
       if (code === undefined) return;
       e.preventDefault();
+      gedrueckt.delete(code);
       fern?.eingabe(`k ${code} 0\n`);
+    };
+    const allesLoslassen = () => {
+      for (const code of gedrueckt) fern?.eingabe(`k ${code} 0\n`);
+      gedrueckt.clear();
     };
     window.addEventListener('keydown', runter, true);
     window.addEventListener('keyup', hoch, true);
+    window.addEventListener('blur', allesLoslassen);
     return () => {
       window.removeEventListener('keydown', runter, true);
       window.removeEventListener('keyup', hoch, true);
+      window.removeEventListener('blur', allesLoslassen);
+      // Steuerung aus oder Tafel zu: auch dann nichts gedrückt zurücklassen.
+      allesLoslassen();
     };
   }, [steuert, fern]);
 

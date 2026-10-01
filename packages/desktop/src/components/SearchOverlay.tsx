@@ -75,7 +75,6 @@ export function SearchOverlay({ onClose, initialTab }: {
       if (gilt) setLokal(treffer.slice(-40).reverse());
     })();
     return () => { gilt = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, scopeChannel, activeChannelId, tab, takt, vertraulicheKanaele.length]);
 
   useEffect(() => {

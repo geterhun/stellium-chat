@@ -83,7 +83,7 @@ berichten() {
   local ergebnis="$1" meldung="$2" eingespielt="$3"
   node -e '
     const fs = require("fs");
-    const [ergebnis, meldung, eingespielt, dauer, arbeit, ziel] = process.argv.slice(1);
+    const [ergebnis, meldung, eingespielt, dauer, arbeit] = process.argv.slice(1);
     const lies = (n, vorgabe) => {
       try { return JSON.parse(fs.readFileSync(`${arbeit}/${n}`, "utf8")); } catch { return vorgabe; }
     };
@@ -100,11 +100,13 @@ berichten() {
       sicherheit: lies("sicherheit.json", null),
       dauerSek: Number(dauer),
     };
-    fs.writeFileSync(ziel + ".neu", JSON.stringify(bericht, null, 2) + "\n");
-    fs.renameSync(ziel + ".neu", ziel);
-  ' "$ergebnis" "$meldung" "$eingespielt" "$(( $(date +%s) - BEGINN ))" "$ARBEIT" "$BERICHT"
-  chown "$BENUTZER":"$BENUTZER" "$BERICHT" 2>/dev/null || true
-  chmod 644 "$BERICHT"
+    process.stdout.write(JSON.stringify(bericht, null, 2) + "\n");
+  ' "$ergebnis" "$meldung" "$eingespielt" "$(( $(date +%s) - BEGINN ))" "$ARBEIT" \
+    | alsBenutzer sh -c 'umask 022 && cat > "$1.neu" && mv -f "$1.neu" "$1"' berichten "$BERICHT"
+  # Als Dienstkonto geschrieben, nicht als root: $DATEN gehört stellium, und
+  # ein Verweis, den der Chat-Server dort unter abhaengigkeiten.json.neu
+  # anlegte, lenkte das Schreiben von root vorher auf eine beliebige Datei —
+  # chown und chmod hinterher folgten ihm ebenso.
 }
 
 gesund() {

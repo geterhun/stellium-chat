@@ -133,6 +133,7 @@ class Socket {
     };
 
     ws.onmessage = (e) => {
+      if (this.ws !== ws) return;
       let ev: ServerEvent;
       try { ev = JSON.parse(e.data as string); } catch { return; }
 
@@ -155,6 +156,13 @@ class Socket {
     };
 
     ws.onclose = () => {
+      /* Eine abgelöste Leitung meldet ihr `close` erst, wenn der Abbau durch
+         ist — nach disconnect() und einem schnellen connect() (Abmelden,
+         gleich wieder Anmelden) steht in this.ws dann schon die NEUE. Ohne
+         diese Abfrage nullte das späte `close` sie aus, hielte ihren Ping an
+         und plante einen Wiederaufbau, der neben der noch offenen neuen eine
+         zweite Leitung aufmacht — jedes Ereignis käme danach doppelt. */
+      if (this.ws !== ws) return;
       this.stopPing();
       this.ws = null;
       if (this.closedByUs) { this.setState('idle'); return; }

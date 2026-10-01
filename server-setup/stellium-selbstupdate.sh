@@ -57,11 +57,14 @@ HINWEIS
 fi
 
 anmelden() {
-  curl -fsS --max-time 15 -X POST "$BASIS/api/auth/login" \
-    -H 'content-type: application/json' \
-    -d "$(printf '{"login":%s,"password":%s}' \
-        "$(printf '%s' "$STELLIUM_UPDATE_LOGIN" | jq -Rs .)" \
-        "$(printf '%s' "$STELLIUM_UPDATE_PASSWORT" | jq -Rs .)")" \
+  # Der Körper geht über die Standardeingabe (@-), nicht als Argument: mit -d
+  # stand das Passwort alle 30 Minuten in der Befehlszeile von curl, und die
+  # kann jedes Konto auf dem Pi in /proc mitlesen.
+  printf '{"login":%s,"password":%s}' \
+      "$(printf '%s' "$STELLIUM_UPDATE_LOGIN" | jq -Rs .)" \
+      "$(printf '%s' "$STELLIUM_UPDATE_PASSWORT" | jq -Rs .)" \
+    | curl -fsS --max-time 15 -X POST "$BASIS/api/auth/login" \
+        -H 'content-type: application/json' --data-binary @- \
     | jq -r '.token // empty'
 }
 
@@ -182,10 +185,13 @@ DAUER="${STELLIUM_UPDATE_DAUER:-240}"            # geschätzte Auszeit
 if [[ "$VORLAUF" -gt 0 ]]; then
   schritt "Ankündigen"
   START=$(( ($(date +%s) + VORLAUF) * 1000 ))
+  # Als stellium geschrieben, nicht als root: /var/lib/stellium gehört dem
+  # Dienstkonto. Legte der Chat-Server dort unter wartung.json einen Verweis
+  # an, schrieb root vorher durch ihn hindurch in eine beliebige Datei und gab
+  # sie mit chown gleich noch dem Dienstkonto.
   jq -n --arg v "$NEU" --arg n "$NOTIZ" --argjson s "$START" --argjson d "$(( DAUER * 1000 ))" \
     '{version:$v, notes:(if $n == "" then null else $n end), startetUm:$s, dauertEtwa:$d}' \
-    > /var/lib/stellium/wartung.json
-  chown stellium:stellium /var/lib/stellium/wartung.json 2>/dev/null || true
+    | runuser -u stellium -- sh -c 'umask 022 && cat > /var/lib/stellium/wartung.json'
   ok "Alle sehen jetzt eine Uhr: in $(( VORLAUF / 60 )) Minuten geht es los"
 
   info "warte"

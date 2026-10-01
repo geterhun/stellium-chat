@@ -127,10 +127,21 @@ export function Composer({ channelId, parentId = null, placeholder, autoFocus }:
 
   useEffect(() => { if (autoFocus) inputRef.current?.focus(); }, [autoFocus, channelId]);
 
+  /* Wohin dieses Feld gerade schreibt — für Antworten, die erst nach einem
+     Kanalwechsel ankommen (siehe applyTone). */
+  const ziel = `${channelId}:${parentId ?? ''}`;
+  const aktuellesZiel = useRef(ziel);
+
   // Beim Kanalwechsel den gespeicherten Entwurf zurückholen.
   useEffect(() => {
+    aktuellesZiel.current = `${channelId}:${parentId ?? ''}`;
     setText(useStore.getState().draftFor(channelId, parentId));
     setPreview(null);
+    /* Anhänge gehören wie der Entwurf zu ihrem Kanal. Blieben sie stehen,
+       ginge eine im vertraulichen Kanal A verschlossene Datei mit der
+       nächsten Nachricht nach B (dort nicht lesbar) — oder eine offene aus A
+       in einen vertraulichen Kanal B, an dessen Verschlüsselung vorbei. */
+    setAttachments([]);
   }, [channelId, parentId]);
 
   /* Compose-Vorschau: so kommt die Nachricht bei den anderen an.
@@ -174,15 +185,20 @@ export function Composer({ channelId, parentId = null, placeholder, autoFocus }:
   const vertraulich = Boolean(channel?.vertraulich);
   const needsPreview = Boolean(self?.composeTargetPreview && targetLang && ai?.translation && !vertraulich);
 
+  /* Zählt jede Änderung am Text mit. Eine Vorschau, die erst nach dem
+     Absenden ankam, stand sonst unter dem leeren Feld — oder die zu einem
+     älteren Stand überschrieb die neuere. */
+  const vorschauNr = useRef(0);
   useEffect(() => {
+    const nr = ++vorschauNr.current;
     // Vier Zeichen: "okay" soll man sich ansehen können, ein "o" nicht.
-    if (!needsPreview || text.trim().length < 4) { setPreview(null); return; }
+    if (!needsPreview || text.trim().length < 4) { setPreview(null); setPreviewing(false); return; }
     const timer = window.setTimeout(() => {
       setPreviewing(true);
       useStore.getState().composePreview(text, targetLang!, channelId)
-        .then((result) => setPreview(result))
-        .catch(() => setPreview(null))
-        .finally(() => setPreviewing(false));
+        .then((result) => { if (nr === vorschauNr.current) setPreview(result); })
+        .catch(() => { if (nr === vorschauNr.current) setPreview(null); })
+        .finally(() => { if (nr === vorschauNr.current) setPreviewing(false); });
     }, 900);
     return () => clearTimeout(timer);
   }, [text, needsPreview, targetLang, channelId]);
@@ -476,7 +492,10 @@ export function Composer({ channelId, parentId = null, placeholder, autoFocus }:
     setRewriting(true);
     try {
       const result = await useStore.getState().rewrite(text, tone);
+      // Inzwischen in einem anderen Kanal: dessen Entwurf nicht überschreiben.
+      if (aktuellesZiel.current !== ziel) return;
       setText(result);
+      useStore.getState().saveDraft(channelId, parentId, result);
     } catch (err) {
       useStore.getState().toast({ kind: 'error', title: t('toast.rewriteFailed'), body: (err as Error).message });
     } finally {
@@ -856,6 +875,9 @@ export function Composer({ channelId, parentId = null, placeholder, autoFocus }:
             onPick={(sendAt) => {
               useStore.getState().schedule({ channelId, text: text.trim(), sendAt, parentId });
               setText('');
+              // Wie nach dem Senden: sonst holte der nächste Kanalwechsel den
+              // schon eingeplanten Text als Entwurf zurück.
+              useStore.getState().saveDraft(channelId, parentId, '');
               setScheduleOpen(false);
               useStore.getState().toast({ kind: 'ok', title: t('toast.scheduled'), body: t('composer.scheduleHint') });
             }}

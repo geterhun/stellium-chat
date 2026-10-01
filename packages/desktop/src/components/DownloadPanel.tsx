@@ -110,6 +110,10 @@ export function DownloadPanel({ onClose }: { onClose: () => void }) {
 
   const laden = () => {
     setFehler(false);
+    /* Zurück auf „lädt": sonst stand nach „Erneut versuchen" bis zur Antwort
+       „Noch keine Fassung veröffentlicht" da, und der Kreisel am Knopf, der
+       an genau diesem Wert hängt, drehte sich nie. */
+    setFassungen(null);
     api.releases()
       .then((r) => setFassungen(r.releases))
       .catch(() => { setFassungen([]); setFehler(true); });

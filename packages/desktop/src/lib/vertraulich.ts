@@ -969,6 +969,13 @@ export async function dateiEntschluesseln(
       dateiKey, chiffrat,
     ));
   }
+  /* Die Stücknummer schützt nur vor Vertauschen, nicht vor Abschneiden: wer
+     hinten ganze Stücke weglässt, bekommt eine kürzere, tadellos
+     entschlüsselbare Datei. Die verschlossene Größe im Kopf verrät das. */
+  const ist = stuecke.reduce((summe, s) => summe + (s as ArrayBuffer).byteLength, 0);
+  if (ist !== kopf.groesse) {
+    throw new Error(txt('fehler.unvollstaendig', { ist, soll: kopf.groesse }));
+  }
   return { kopf, blob: new Blob(stuecke, { type: kopf.mime }) };
 }
 

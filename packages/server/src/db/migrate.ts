@@ -1157,6 +1157,11 @@ function bestehendeTexteVerschluesseln(): void {
        damit ohnehin sichtbar — in der Datenbank hat er trotzdem nichts im
        Klartext zu suchen, wie jeder andere geschriebene Satz auch. */
     { tabelle: 'vertraulich_freigaben', spalte: 'grund', schluessel: 'id' },
+    /* Die Begründung eines KI-Gruppenvorschlags fasst den Inhalt einer
+       fremden Mail zusammen ("Bewerbung als …") — derselbe Stoff, der in
+       mail_nachrichten verschlüsselt liegt. Sie lag bis zu
+       services/post-partnergruppen.ts::vorschlagEintragen() im Klartext. */
+    { tabelle: 'mail_partner', spalte: 'gruppe_begruendung', schluessel: 'adresse_bidx' },
   ];
 
   let gesamt = 0;

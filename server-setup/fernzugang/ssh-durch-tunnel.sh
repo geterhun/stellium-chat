@@ -106,7 +106,9 @@ warte_bis_gesund() {
 }
 
 # ── SSH-Port ermitteln, nicht annehmen ──────────────────────────
-SSH_PORT="$(sshd -T 2>/dev/null | awk '/^port /{print $2}' | head -1)"
+# "|| true": scheitert `sshd -T`, brach das Skript unter pipefail an dieser
+# Zuweisung wortlos ab, und die 22 darunter kam nie zum Zug.
+SSH_PORT="$(sshd -T 2>/dev/null | awk '/^port /{print $2}' | head -1 || true)"
 [[ -z "$SSH_PORT" ]] && SSH_PORT=22
 
 # ── Nur nachsehen ───────────────────────────────────────────────

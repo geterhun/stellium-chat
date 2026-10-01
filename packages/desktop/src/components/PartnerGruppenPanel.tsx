@@ -42,7 +42,7 @@
  * kein Tagesgeschäft) und ist deshalb strenger als das Ändern der Gruppe
  * EINES Briefpartners weiter unten (`mail.senden`, siehe `darfAendern`).
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Check, Loader2, Pencil, Plus, RefreshCw, Trash2, Users, X } from 'lucide-react';
 import type { MailPartner, PartnerGruppeInfo } from '@stellium/shared';
 import { PARTNER_GRUPPEN } from '@stellium/shared';
@@ -233,7 +233,14 @@ export function PartnerGruppenPanel({ onClose }: { onClose: () => void }) {
      Sprachabfrage in PostSchreiben.tsx (`let lebt = true`, beim Aufräumen
      auf `false`) — hier als Parameter statt als feste Variable, weil
      dieselbe Funktion auch ohne Wache vom Knopf aus aufgerufen wird. */
-  const laden = async (pruefeAktuell: () => boolean = () => true) => {
+  /* Zusätzlich eine laufende Nummer: auch der Knopf braucht eine Wache,
+     sobald danach der Filter wechselt — sonst überschreibt seine späte
+     Antwort (alter Filter) die Liste des neuen Reiters. Es gilt nur die
+     zuletzt gestellte Anfrage, gleich von wo. */
+  const ladeNummer = useRef(0);
+  const laden = async (pruefeAktuellVon: () => boolean = () => true) => {
+    const nummer = ++ladeNummer.current;
+    const pruefeAktuell = () => nummer === ladeNummer.current && pruefeAktuellVon();
     setLaedt(true); setFehler(null);
     try {
       const antwort = await partnerHolen({

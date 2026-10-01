@@ -32,6 +32,15 @@ fehler()  { printf '\n%s✗ %s%s\n\n' "$ROT$FETT" "$*" "$AUS" >&2; exit 1; }
 BEFEHL="${1:-}"
 DATEN="/var/lib/stellium"
 ADRESSDATEI="$DATEN/tunnel-adresse"
+
+# Die Adresse als Besitzer von $DATEN schreiben, nicht als root. Der Ordner
+# gehört dem Dienstkonto stellium; ein Verweis, den der Chat-Server dort unter
+# "tunnel-adresse" anlegt, lenkte sonst das Schreiben von root auf eine
+# beliebige Datei um.
+adresse_ablegen() {
+  printf '%s\n' "$1" | runuser -u "$(stat -c %U "$DATEN")" -- \
+    sh -c 'umask 022 && cat > "$1"' adresse_ablegen "$ADRESSDATEI"
+}
 GEMERKT="/etc/stellium-einrichtung.conf"
 # shellcheck source=/dev/null
 [[ -r "$GEMERKT" ]] && . "$GEMERKT"
@@ -191,7 +200,7 @@ DIENST
   done
 
   [[ -n "$adresse" ]] || fehler "Der Tunnel meldet keine Adresse. Nachsehen: journalctl -u stellium-tunnel -n 40"
-  printf '%s\n' "$adresse" > "$ADRESSDATEI"
+  adresse_ablegen "$adresse"
 
   # Nach jedem Neustart eine neue Adresse — deshalb nachhalten.
   cat > /usr/local/bin/stellium-tunnel-adresse <<'MERK'
@@ -200,7 +209,11 @@ DIENST
 set -Eeuo pipefail
 A="$(journalctl -u stellium-tunnel --since '-10min' --no-pager 2>/dev/null \
   | grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' | tail -1 || true)"
-[[ -n "$A" ]] && printf '%s\n' "$A" > /var/lib/stellium/tunnel-adresse
+# Als Besitzer des Ordners geschrieben, nicht als root — siehe
+# adresse_ablegen in stellium-tunnel.
+[[ -n "$A" ]] || exit 0
+printf '%s\n' "$A" | runuser -u "$(stat -c %U /var/lib/stellium)" -- \
+  sh -c 'umask 022 && cat > /var/lib/stellium/tunnel-adresse'
 MERK
   chmod 755 /usr/local/bin/stellium-tunnel-adresse
 
@@ -293,7 +306,7 @@ ANLEITUNG
     local name
     name="$(frage "Unter welcher Adresse hast du ihn veröffentlicht? (z.B. chat.meinefirma.de): ")"
     if [[ -n "$name" ]]; then
-      printf 'https://%s\n' "${name#https://}" > "$ADRESSDATEI"
+      adresse_ablegen "https://${name#https://}"
       cat <<FERTIG
 
    ${GRUEN}${FETT}Erreichbar unter${AUS}

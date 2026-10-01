@@ -435,7 +435,9 @@ function auspacken(z: PartnerZeile): MailPartnerAntwort {
     gruppe: z.gruppe,
     gruppeVonKi: z.gruppe_von_ki === 1,
     gruppeVorschlagAm: z.gruppe_vorschlag_am,
-    begruendung: z.gruppe_begruendung,
+    /* Verschlüsselt wie die Adresse daneben (siehe vorschlagEintragen());
+       ältere Zeilen im Klartext reicht entschluesseln() unverändert durch. */
+    begruendung: z.gruppe_begruendung ? entschluesseln(z.gruppe_begruendung) || null : null,
     // Aus derselben Erwägung wie bei `gruppe` oben nicht je Zeile
     // nachvalidiert: jeder Schreibpfad unten setzt einen der drei bekannten
     // Werte oder NULL.
@@ -881,19 +883,24 @@ export function vorschlagEintragen(adresse: string, ergebnis: Klassifikation): '
   if (vorhanden && vorhanden.gruppe_vorschlag_am !== null) return 'uebersprungen';
 
   const jetzt = Date.now();
+  /* Die Begründung ist ein Satz der KI ÜBER den Inhalt einer fremden Mail
+     („Bewerbung als …", „Rechnung zu Auftrag …") — derselbe Stoff, der in
+     mail_nachrichten und mail_sichtung.einordnung verschlüsselt liegt, also
+     auch hier nicht im Klartext. */
+  const begruendung = ergebnis.begruendung ? verschluesseln(ergebnis.begruendung) : null;
   // `gruppe_beleg` bleibt leer: ein KI-Vorschlag stützt sich auf gar keinen
   // Beleg im Sinne dieser Spalte, er ist eine Vermutung über den Inhalt.
   if (!vorhanden) {
     db.run(
       `INSERT INTO mail_partner (adresse_bidx, adresse, sprache, sicher, seit, gruppe, gruppe_von_ki, gruppe_vorschlag_am, gruppe_begruendung, gruppe_beleg)
        VALUES (?,?,?,0,?,?,1,?,?,NULL)`,
-      bidx, verschluesseln(adresse), SPRACHE_VORGABE, jetzt, ergebnis.gruppe, jetzt, ergebnis.begruendung,
+      bidx, verschluesseln(adresse), SPRACHE_VORGABE, jetzt, ergebnis.gruppe, jetzt, begruendung,
     );
   } else {
     db.run(
       `UPDATE mail_partner SET gruppe = ?, gruppe_von_ki = 1, gruppe_vorschlag_am = ?, gruppe_begruendung = ?, gruppe_beleg = NULL
        WHERE adresse_bidx = ?`,
-      ergebnis.gruppe, jetzt, ergebnis.begruendung, bidx,
+      ergebnis.gruppe, jetzt, begruendung, bidx,
     );
   }
   return 'eingetragen';
@@ -1013,6 +1020,17 @@ export async function lauf(): Promise<LaufBericht> {
         (err as Error).message,
       );
       break;
+    }
+
+    /* Während des Modellaufrufs kann die Mail endgültig gelöscht worden sein
+       (post.ts::mailsHartLoeschen(), Art. 17 DSGVO oder Frist) — und mit ihr
+       der Briefpartner, wenn sonst nichts mehr von ihm da ist. Ein Eintrag
+       jetzt legte ihn mitsamt einer aus der gelöschten Mail gelesenen
+       Begründung wieder an. */
+    if (!db.get('SELECT 1 FROM mail_nachrichten WHERE id = ?', z.id)) {
+      setSetting(WASSERSTAND_SCHLUESSEL, z.id, 'system');
+      gesichtet += 1;
+      continue;
     }
 
     if (vorschlagEintragen(adresse, klass) === 'eingetragen') vorschlaege += 1;

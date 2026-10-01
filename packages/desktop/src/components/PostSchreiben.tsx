@@ -327,7 +327,6 @@ function SchreibFenster({ onClose, onGesendet }: { onClose: () => void; onGesend
         .finally(() => { if (lebt) setSpracheLaedt(false); });
     }, 350);
     return () => { lebt = false; clearTimeout(zeitgeber); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [an, adresseGueltig]);
 
   const absenderWaehlen = (fach: string) => {

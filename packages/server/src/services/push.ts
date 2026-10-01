@@ -378,6 +378,13 @@ async function anEinGeraet(abo: Abo, nutzlast: Buffer): Promise<void> {
       },
       body: nutzlast,
       signal: ctrl.signal,
+      /* Keiner Umleitung folgen. endpointTauglich() prüft nur die ERSTE
+         Adresse; ein Endpoint auf einem eigenen, öffentlichen Host könnte mit
+         `307 -> http://192.168.1.1/…` antworten, und fetch trüge denselben
+         POST samt Körper ins Heimnetz des Pi — an allen Sperren oben vorbei.
+         Echte Push-Dienste leiten nicht um; eine 3xx-Antwort landet unten als
+         gewöhnlicher Fehlschlag im Protokoll. */
+      redirect: 'manual',
     });
 
     if (antwort.status === 404 || antwort.status === 410) {

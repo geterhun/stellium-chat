@@ -401,7 +401,12 @@ export function App() {
       <AnimatePresence>
         <UpdateWillkommen key="neu" />
         {overlay === 'channelSettings' && activeChannelId && (
-          <ChannelSettings key="chset" channelId={activeChannelId} onClose={closeOverlay} />
+          /* Kennung je Kanal: ChannelSettings übernimmt Name, Thema und Zweck
+             nur beim ersten Zeichnen in den eigenen Zustand. Wechselte der
+             Kanal bei offenem Fenster (Klick auf eine Benachrichtigung),
+             schrieb das nächste Verlassen eines Felds die Werte des alten
+             Kanals in den neuen. */
+          <ChannelSettings key={`chset:${activeChannelId}`} channelId={activeChannelId} onClose={closeOverlay} />
         )}
         {overlay === 'poll' && activeChannelId && (
           <PollDialog key="poll" channelId={activeChannelId} onClose={closeOverlay} />
