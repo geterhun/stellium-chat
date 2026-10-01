@@ -1425,17 +1425,27 @@ export const useStore = create<StoreState>((set, get) => ({
   loadSmartReplies: (channelId, parentId) => {
     if (!get().ai?.assistant) return;
     const requestId = uid();
+    vorschlagAnfrage = requestId;
     set({ smartRepliesLoading: true, smartReplies: [] });
     void awaitReply<SmartReply[]>(requestId, 30_000)
-      .then((replies) => set({ smartReplies: replies, smartRepliesLoading: false }))
+      .then((replies) => {
+        if (vorschlagAnfrage !== requestId) return;
+        // Inzwischen woanders: dort gehören diese Vorschläge nicht hin.
+        const nochHier = get().activeChannelId === channelId;
+        set({ smartReplies: nochHier ? replies : [], smartRepliesLoading: false });
+      })
       .catch((err: Error) => {
+        if (vorschlagAnfrage !== requestId) return;
         set({ smartReplies: [], smartRepliesLoading: false });
         get().toast({ kind: 'error', title: ts('toast.noSuggestions'), body: err.message });
       });
     frageHinaus(requestId, { t: 'ai:smart-replies', requestId, channelId, parentId: parentId ?? null });
   },
 
-  clearSmartReplies: () => set({ smartReplies: [], smartRepliesLoading: false }),
+  clearSmartReplies: () => {
+    vorschlagAnfrage = null;
+    set({ smartReplies: [], smartRepliesLoading: false });
+  },
 
   rewrite: async (text, tone, targetLang) => {
     const requestId = uid();
